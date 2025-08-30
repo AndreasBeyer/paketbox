@@ -262,7 +262,6 @@ async def Klappen_oeffnen():
    print("Klappen fahren auf")
    await setOutputWithRuntime(62, Q2, GPIO.LOW)
    await setOutputWithRuntime(62, Q4, GPIO.LOW)
-
    # Starte Timer mit Callback zur Endlagenprüfung
    async def klappen_open_check():
       await asyncio.sleep(62)  # Wartezeit in Sekunden für Endlagenprüfung 
