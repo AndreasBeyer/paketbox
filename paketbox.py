@@ -91,11 +91,11 @@ def init():
    GPIO.add_event_detect(I04, GPIO.RISING, callback=handleRightFlapOpened, bouncetime=200) # Endsensor Klappe rechts geöffnet
    GPIO.add_event_detect(I05, GPIO.BOTH, callback=handleDeliveryDoorStatus, bouncetime=200) # Paket Tür geöffnet o. geschlossen
    GPIO.add_event_detect(I06, GPIO.FALLING, callback=handleMailboxOpen, bouncetime=200) # Briefkasten Zusteller geoffnet
-   GPIO.add_event_detect(I07, GPIO.FALLING, callback=Briefkasten_Tuer_Entnahme_geoeffnet, bouncetime=200) # Briefkasten Entnahme
-   GPIO.add_event_detect(I08, GPIO.FALLING, callback=Paketbox_Tuer_Entnahme_geoeffnet, bouncetime=200) # Paketbox Entnahme
-   GPIO.add_event_detect(I09, GPIO.RISING, callback=Taster_Tueroeffner_6_gedrueckt, bouncetime=200) # Tueroeffner 6
-   GPIO.add_event_detect(I10, GPIO.RISING, callback=Taster_Tueroeffner_8_gedrueckt, bouncetime=200) # Tueroeffner 8
-   GPIO.add_event_detect(I11, GPIO.RISING, callback=Bewegungsmelder_Einklemmschutz, bouncetime=200) # Bewegungsmelder Einklemmschutz
+   GPIO.add_event_detect(I07, GPIO.FALLING, callback=handleMailboxDoorOpen, bouncetime=200) # Briefkasten Entnahme
+   GPIO.add_event_detect(I08, GPIO.FALLING, callback=handlePackageBoxDoorOpen, bouncetime=200) # Paketbox Entnahme
+   GPIO.add_event_detect(I09, GPIO.RISING, callback=handleGartenDoorButton6Press, bouncetime=200) # Tueroeffner 6
+   GPIO.add_event_detect(I10, GPIO.RISING, callback=handleGardenDoorButton8Press, bouncetime=200) # Tueroeffner 8
+   GPIO.add_event_detect(I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
 
 def setOutputWithRuntime(runtime, gpio, state):
     GPIO.output(gpio, state)
@@ -106,6 +106,7 @@ async def gpio_delayed(delay, gpio, state): # delay in Sekunden
    GPIO.output(gpio,state)
    print("GPIO " + gpio + " geschalten zu " + satate)
 
+# region Callsbacks
 async def handleLeftFlapClosed(channel):
    await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
@@ -139,6 +140,55 @@ async def handleRightFlapOpened(channel):
     await Klappen_schliessen()
  #  print("Klappe wird wieder geschlossen")
 
+async def handleDeliveryDoorStatus(channel):
+   if GPIO.input(channel):
+      await asyncio.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      await Paket_Tuer_Zusteller_geoeffnet()
+   else:
+      await asyncio.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      await Paket_Tuer_Zusteller_geschlossen()
+
+async def handleMailboxOpen(channel):
+   await asyncio.sleep(0.2)
+   if GPIO.input(channel) == GPIO.HIGH:
+      return
+   print("Der Briefkasten wurde geöffnet")
+
+async def handlePackageBoxDoorOpen(channel):
+   await asyncio.sleep(0.2)
+   if GPIO.input(channel) == GPIO.HIGH:
+      return
+   print("Die Tür zur Paketentnahme wurde geöffnet")
+
+async def handleMailboxDoorOpen(channel):
+   await asyncio.sleep(0.2)
+   if GPIO.input(channel) == GPIO.HIGH:
+      return
+   print("Die Türe zum Briefe entnehmen wurde geöffnet")
+
+async def handleGartenDoorButton6Press(channel):
+   await asyncio.sleep(0.2)
+   if GPIO.input(channel) == GPIO.HIGH:
+      return
+   print("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
+
+async def handleGardenDoorButton8Press(channel):
+   await asyncio.sleep(0.2)
+   if GPIO.input(channel) == GPIO.HIGH:
+      return
+   print("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
+
+async def handleMotionDetection(channel):
+   await asyncio.sleep(0.2)
+   if GPIO.input(channel) == GPIO.HIGH:
+      return
+   print("Der Bewegungsmelder hat eine Bewegung erkannt.")
+
+# endregion
 
 async def Klappen_schliessen():
    if get_global_error:
@@ -176,54 +226,6 @@ async def Paket_Tuer_Zusteller_geoeffnet():
    # Audiofile: Funktion der Paketbox
    print("Türe Paketzusteller wurde geöffnet:")
 
-
-async def handleDeliveryDoorStatus(channel):
-   if GPIO.input(channel):
-      await asyncio.sleep(0.2)
-      if GPIO.input(channel) == GPIO.HIGH:
-         return
-      await Paket_Tuer_Zusteller_geoeffnet()
-   else:
-      await asyncio.sleep(0.2)
-      if GPIO.input(channel) == GPIO.HIGH:
-         return
-      await Paket_Tuer_Zusteller_geschlossen()
-
-async def handleMailboxOpen(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Briefkasten wurde geöffnet")
-
-async def Paketbox_Tuer_Entnahme_geoeffnet(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Die Tür zur Paketentnahme wurde geöffnet")
-
-async def Briefkasten_Tuer_Entnahme_geoeffnet(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Die Türe zum Briefe entnehmen wurde geöffnet")
-
-async def Taster_Tueroeffner_6_gedrueckt(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
-
-async def Taster_Tueroeffner_8_gedrueckt(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
-
-async def Bewegungsmelder_Einklemmschutz(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Bewegungsmelder hat eine Bewegung erkannt.")
 
 
 # Async Main Loop
