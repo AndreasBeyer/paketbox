@@ -1,24 +1,58 @@
+# region State Management
+from enum import Enum, auto
 
-# Threadsicherer globaler Fehlerzustand
-import threading
-_global_error = False
-_global_error_lock = threading.Lock()
+class DoorState(Enum):
+   CLOSED = auto()
+   OPEN = auto()
+   ERROR = auto()
 
-def set_global_error(state: bool):
-   global _global_error
-   with _global_error_lock:
-      _global_error = state
-   print(f"Globaler Fehlerzustand wurde auf {state} gesetzt.")
-
-def get_global_error() -> bool:
-   with _global_error_lock:
-      return _global_error
 
 import RPi.GPIO as GPIO
 import time
 import asyncio
+import threading
 
-# GPIO.cleanup()
+class PaketBoxState:
+   def __init__(self):
+      self._lock = threading.Lock()
+      self.left_door = DoorState.CLOSED
+      self.right_door = DoorState.CLOSED
+      self.paket_tuer = DoorState.CLOSED
+
+   def set_left_door(self, state: DoorState):
+      with self._lock:
+         self.left_door = state
+   def set_right_door(self, state: DoorState):
+      with self._lock:
+         self.right_door = state
+   def set_paket_tuer(self, state: DoorState):
+      with self._lock:
+         self.paket_tuer = state
+
+   def is_all_closed(self):
+      with self._lock:
+         return all([
+            self.left_door == DoorState.CLOSED,
+            self.right_door == DoorState.CLOSED,
+            self.paket_tuer == DoorState.CLOSED
+         ])
+
+   def is_any_error(self):
+      with self._lock:
+         return any([
+            self.left_door == DoorState.ERROR,
+            self.right_door == DoorState.ERROR,
+            self.paket_tuer == DoorState.ERROR
+         ])
+
+   def __str__(self):
+      with self._lock:
+         return (f"Links: {self.left_door.name}, Rechts: {self.right_door.name}, "
+               f"Pakettür: {self.paket_tuer.name}")
+
+# Initialisiere globalen Zustand
+pbox_state = PaketBoxState()
+# endregion
 
 # Pinbelegung der Relais
 #  BCM  Stiftpin
@@ -98,58 +132,71 @@ def init():
    GPIO.add_event_detect(I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
 
 def setOutputWithRuntime(runtime, gpio, state):
+    """
+    Sets the output state of a specified GPIO pin and schedules a delayed toggle.
+
+    Args:
+        runtime (float): The delay time in seconds before toggling the GPIO pin state.
+        gpio (int): The GPIO pin number to set.
+        state (bool): The initial state to set for the GPIO pin.
+
+    Side Effects:
+        Changes the state of the specified GPIO pin immediately and schedules a delayed toggle of its state.
+
+    Note:
+        Assumes that the GPIO library is properly initialized and gpio_delayed is defined elsewhere.
+    """
     GPIO.output(gpio, state)
     gpio_delayed(runtime, gpio, ~state)
 
 async def gpio_delayed(delay, gpio, state): # delay in Sekunden
    await asyncio.sleep(delay)
    GPIO.output(gpio,state)
-   print("GPIO " + gpio + " geschalten zu " + satate)
+   print("GPIO " + gpio + " geschalten zu " + state)
 
 # region Callsbacks
 async def handleLeftFlapClosed(channel):
    await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
+   pbox_state.set_left_door(DoorState.CLOSED)
    print("Entleerungsklappe links ist geschlossen")
-   # GPIO.output(Q1, GPIO.HIGH) # Antrieb aus Fahrtrichtung zu
+
 
 async def handleLeftFLapOpened(channel):
     await asyncio.sleep(0.2)
     if GPIO.input(channel) == GPIO.HIGH:
        return
+    pbox_state.set_left_door(DoorState.OPEN)
     print("Entleerungsklappe links ist geöffnet")
-    # GPIO.output(Q2, GPIO.HIGH) # Antrieb aus Fahrtrichtung auf
+
 
 async def handleRightFlapClosed(channel):
    await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
+   pbox_state.set_right_door(DoorState.CLOSED)
    print("Entleerungsklappe rechts ist geschlossen")
-   # GPIO.output(Q3, GPIO.HIGH) # Antrieb aus Fahrtrichtung zu
-   # GPIO.output(Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
- #  print("Tuer wird freigegeben")
 
 async def handleRightFlapOpened(channel):
     await asyncio.sleep(0.2)
     if GPIO.input(channel) == GPIO.HIGH:
          return # Entprellen
+    pbox_state.set_right_door(DoorState.OPEN)
     print("Entleerungsklappe links ist geöffnet")
-    # GPIO.output(Q4, GPIO.HIGH) # Antrieb aus Fahrtrichtung auf
- #  await asyncio.sleep(0.5)
-    await Klappen_schliessen()
- #  print("Klappe wird wieder geschlossen")
 
 async def handleDeliveryDoorStatus(channel):
    if GPIO.input(channel):
       await asyncio.sleep(0.2)
       if GPIO.input(channel) == GPIO.HIGH:
          return
+      pbox_state.set_paket_tuer(DoorState.OPEN)
       await Paket_Tuer_Zusteller_geoeffnet()
    else:
       await asyncio.sleep(0.2)
       if GPIO.input(channel) == GPIO.HIGH:
          return
+      pbox_state.set_paket_tuer(DoorState.CLOSED)
       await Paket_Tuer_Zusteller_geschlossen()
 
 async def handleMailboxOpen(channel):
@@ -190,31 +237,50 @@ async def handleMotionDetection(channel):
 
 # endregion
 
+# region Actions
+
+def unlockDoor():
+   GPIO.output(Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
+   print("Türe Paketzusteller wurde entriegelt.")
+
+def lockDoor():
+   GPIO.output(Q8, GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
+   print("Türe Paketzusteller wurde verriegelt.")
+
 async def Klappen_schliessen():
-   if get_global_error:
+   if pbox_state.is_any_error:
       print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
       return
    print("Klappen fahren zu")
-#   GPIO.output(Q1, GPIO.LOW) # fahre Linke Klappe zu
-#   GPIO.output(Q3, GPIO.LOW) # fahre rechte Klappe zu
+   await setOutputWithRuntime(62, Q1, GPIO.LOW)
+   await setOutputWithRuntime(62, Q3, GPIO.LOW)
 
 async def Klappen_oeffnen():
-   if get_global_error:
+   if pbox_state.is_any_error():
       print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
       return
    print("Klappen fahren auf")
-#   await setOutputWithRuntime(120, Q2, GPIO.LOW)
-#   await setOutputWithRuntime(120, Q4, GPIO.LOW)
-#   GPIO.output(Q2, GPIO.LOW) # fahre Linke Klappe auf
-#   GPIO.output(Q4, GPIO.LOW) # fahre rechte Klappe auf
+   await setOutputWithRuntime(62, Q2, GPIO.LOW)
+   await setOutputWithRuntime(62, Q4, GPIO.LOW)
+
+   # Starte Timer mit Callback zur Endlagenprüfung
+   async def klappen_open_check():
+      await asyncio.sleep(62)  # Wartezeit in Sekunden für Endlagenprüfung 
+      # Hardware Prüfung, ob beide Klappen offen sind
+
+      if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
+         print("Fehler: Klappen nicht offen nach Öffnungsversuch!")
+         pbox_state.set_left_door(DoorState.ERROR)
+         pbox_state.set_right_door(DoorState.ERROR)
+      else:
+         print("Klappen erfolgreich geöffnet.")
+   asyncio.create_task(klappen_open_check())
 
 async def Paket_Tuer_Zusteller_geschlossen():
    print("Türe Paketzusteller wurde geschlossen.")
    # Audiofile: Die Box wird sich in 10 Sekunden verriegeln. Wenn noch neue Pakete abgegeben werden sollen Türe wieder öffnen.
-   GPIO.output(Q8, GPIO.LOW) # Tür verriegelt
-   print("Türe Paketzusteller wurde verriegelt.")
+   lockDoor()
    await asyncio.sleep(10)
-   GPIO.output(Q8, GPIO.HIGH)
    await Klappen_oeffnen()
    # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
@@ -226,7 +292,7 @@ async def Paket_Tuer_Zusteller_geoeffnet():
    # Audiofile: Funktion der Paketbox
    print("Türe Paketzusteller wurde geöffnet:")
 
-
+# endregion
 
 # Async Main Loop
 async def main():
@@ -244,5 +310,8 @@ async def main():
       GPIO.cleanup()
       print("GPIO aufgeräumt.")
 
+# Diese Zeilen sorgen dafür, dass das Skript nur ausgeführt wird,
+# wenn es direkt gestartet wird (und nicht importiert).
+# asyncio.run(main()) startet die asynchrone Hauptfunktion.
 if __name__ == "__main__":
    asyncio.run(main())
