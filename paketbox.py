@@ -1,4 +1,19 @@
 
+# Threadsicherer globaler Fehlerzustand
+import threading
+_global_error = False
+_global_error_lock = threading.Lock()
+
+def set_global_error(state: bool):
+   global _global_error
+   with _global_error_lock:
+      _global_error = state
+   print(f"Globaler Fehlerzustand wurde auf {state} gesetzt.")
+
+def get_global_error() -> bool:
+   with _global_error_lock:
+      return _global_error
+
 import RPi.GPIO as GPIO
 import time
 import asyncio
@@ -70,12 +85,12 @@ def init():
    GPIO.setup(I11, GPIO.IN)
 
    #Interrupt
-   GPIO.add_event_detect(I01, GPIO.RISING, callback=Klappe_links_geschlossen, bouncetime=200) # Klappe links geschlossen
-   GPIO.add_event_detect(I02, GPIO.RISING, callback=Klappe_links_geoeffnet, bouncetime=200)
-   GPIO.add_event_detect(I03, GPIO.RISING, callback=Klappe_rechts_geschlossen, bouncetime=200) # Klappe rechts geschlossen
-   GPIO.add_event_detect(I04, GPIO.RISING, callback=Klappe_rechts_geoeffnet, bouncetime=200) # Klappe rechts geöffnet
-   GPIO.add_event_detect(I05, GPIO.BOTH, callback=Paket_Tuer_Zusteller, bouncetime=200) # Paket Tür geöffnet o. geschlossen
-   GPIO.add_event_detect(I06, GPIO.FALLING, callback=Briefkasten_geoeffnet, bouncetime=200) # Briefkasten Zusteller geoffnet
+   GPIO.add_event_detect(I01, GPIO.RISING, callback=handleLeftFlapClosed, bouncetime=200) # EndsensorKlappe links geschlossen
+   GPIO.add_event_detect(I02, GPIO.RISING, callback=handleLeftFLapOpened, bouncetime=200) # Endsensor Klappe links geöffnet
+   GPIO.add_event_detect(I03, GPIO.RISING, callback=handleRightFlapClosed, bouncetime=200) # Endsensor Klappe rechts geschlossen
+   GPIO.add_event_detect(I04, GPIO.RISING, callback=handleRightFlapOpened, bouncetime=200) # Endsensor Klappe rechts geöffnet
+   GPIO.add_event_detect(I05, GPIO.BOTH, callback=handleDeliveryDoorStatus, bouncetime=200) # Paket Tür geöffnet o. geschlossen
+   GPIO.add_event_detect(I06, GPIO.FALLING, callback=handleMailboxOpen, bouncetime=200) # Briefkasten Zusteller geoffnet
    GPIO.add_event_detect(I07, GPIO.FALLING, callback=Briefkasten_Tuer_Entnahme_geoeffnet, bouncetime=200) # Briefkasten Entnahme
    GPIO.add_event_detect(I08, GPIO.FALLING, callback=Paketbox_Tuer_Entnahme_geoeffnet, bouncetime=200) # Paketbox Entnahme
    GPIO.add_event_detect(I09, GPIO.RISING, callback=Taster_Tueroeffner_6_gedrueckt, bouncetime=200) # Tueroeffner 6
@@ -91,22 +106,22 @@ async def gpio_delayed(delay, gpio, state): # delay in Sekunden
    GPIO.output(gpio,state)
    print("GPIO " + gpio + " geschalten zu " + satate)
 
-def Klappe_links_geschlossen(channel):
-   time.sleep(0.2)
+async def handleLeftFlapClosed(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Entleerungsklappe links ist geschlossen")
    # GPIO.output(Q1, GPIO.HIGH) # Antrieb aus Fahrtrichtung zu
 
-def Klappe_links_geoeffnet(channel):
-   time.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-     return
-   print("Entleerungsklappe links ist geöffnet")
-   # GPIO.output(Q2, GPIO.HIGH) # Antrieb aus Fahrtrichtung auf
+async def handleLeftFLapOpened(channel):
+    await asyncio.sleep(0.2)
+    if GPIO.input(channel) == GPIO.HIGH:
+       return
+    print("Entleerungsklappe links ist geöffnet")
+    # GPIO.output(Q2, GPIO.HIGH) # Antrieb aus Fahrtrichtung auf
 
-def Klappe_rechts_geschlossen(channel):
-   time.sleep(0.2)
+async def handleRightFlapClosed(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Entleerungsklappe rechts ist geschlossen")
@@ -114,147 +129,118 @@ def Klappe_rechts_geschlossen(channel):
    # GPIO.output(Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
  #  print("Tuer wird freigegeben")
 
-def Klappe_rechts_geoeffnet(channel):
-   time.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return # Entprellen
-   print("Entleerungsklappe links ist geöffnet")
-   # GPIO.output(Q4, GPIO.HIGH) # Antrieb aus Fahrtrichtung auf
- #  time.sleep(0.5)
-   Klappen_schliessen()
+async def handleRightFlapOpened(channel):
+    await asyncio.sleep(0.2)
+    if GPIO.input(channel) == GPIO.HIGH:
+         return # Entprellen
+    print("Entleerungsklappe links ist geöffnet")
+    # GPIO.output(Q4, GPIO.HIGH) # Antrieb aus Fahrtrichtung auf
+ #  await asyncio.sleep(0.5)
+    await Klappen_schliessen()
  #  print("Klappe wird wieder geschlossen")
 
 
-def Klappen_schliessen():
+async def Klappen_schliessen():
+   if get_global_error:
+      print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
+      return
    print("Klappen fahren zu")
 #   GPIO.output(Q1, GPIO.LOW) # fahre Linke Klappe zu
 #   GPIO.output(Q3, GPIO.LOW) # fahre rechte Klappe zu
 
-def Klappen_oeffnen():
+async def Klappen_oeffnen():
+   if get_global_error:
+      print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
+      return
    print("Klappen fahren auf")
-
-#   setOutputWithRuntime(120, Q2, GPIO.LOW)
-#   setOutputWithRuntime(120, Q4, GPIO.LOW)
-#
+#   await setOutputWithRuntime(120, Q2, GPIO.LOW)
+#   await setOutputWithRuntime(120, Q4, GPIO.LOW)
 #   GPIO.output(Q2, GPIO.LOW) # fahre Linke Klappe auf
 #   GPIO.output(Q4, GPIO.LOW) # fahre rechte Klappe auf
 
-def Paket_Tuer_Zusteller_geschlossen():
+async def Paket_Tuer_Zusteller_geschlossen():
    print("Türe Paketzusteller wurde geschlossen.")
    # Audiofile: Die Box wird sich in 10 Sekunden verriegeln. Wenn noch neue Pakete abgegeben werden sollen Türe wieder öffnen.
    GPIO.output(Q8, GPIO.LOW) # Tür verriegelt
    print("Türe Paketzusteller wurde verriegelt.")
-   time.sleep(10)
+   await asyncio.sleep(10)
    GPIO.output(Q8, GPIO.HIGH)
-   Klappen_oeffnen()
+   await Klappen_oeffnen()
    # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
-def Paket_Tuer_Zusteller_geoeffnet():
+async def Paket_Tuer_Zusteller_geoeffnet():
    if GPIO.input(I01) == GPIO.HIGH or GPIO.input(I03) == GPIO.HIGH:
-      Klappen_schliessen()
+      await Klappen_schliessen()
       print("Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
 
    # Audiofile: Funktion der Paketbox
    print("Türe Paketzusteller wurde geöffnet:")
 
 
-def Paket_Tuer_Zusteller(channel):
+async def handleDeliveryDoorStatus(channel):
    if GPIO.input(channel):
-      time.sleep(0.2)
+      await asyncio.sleep(0.2)
       if GPIO.input(channel) == GPIO.HIGH:
          return
-      Paket_Tuer_Zusteller_geoeffnet()
+      await Paket_Tuer_Zusteller_geoeffnet()
    else:
-      time.sleep(0.2)
+      await asyncio.sleep(0.2)
       if GPIO.input(channel) == GPIO.HIGH:
          return
-      Paket_Tuer_Zusteller_geschlossen()
+      await Paket_Tuer_Zusteller_geschlossen()
 
-def Briefkasten_geoeffnet(channel):
-   time.sleep(0.2)
+async def handleMailboxOpen(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Der Briefkasten wurde geöffnet")
 
-def Paketbox_Tuer_Entnahme_geoeffnet(channel):
-   time.sleep(0.2)
+async def Paketbox_Tuer_Entnahme_geoeffnet(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Die Tür zur Paketentnahme wurde geöffnet")
 
-def Briefkasten_Tuer_Entnahme_geoeffnet(channel):
-   time.sleep(0.2)
+async def Briefkasten_Tuer_Entnahme_geoeffnet(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Die Türe zum Briefe entnehmen wurde geöffnet")
 
-def Taster_Tueroeffner_6_gedrueckt(channel):
-   time.sleep(0.2)
+async def Taster_Tueroeffner_6_gedrueckt(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
 
-def Taster_Tueroeffner_8_gedrueckt(channel):
-   time.sleep(0.2)
+async def Taster_Tueroeffner_8_gedrueckt(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
 
-def Bewegungsmelder_Einklemmschutz(channel):
-   time.sleep(0.2)
+async def Bewegungsmelder_Einklemmschutz(channel):
+   await asyncio.sleep(0.2)
    if GPIO.input(channel) == GPIO.HIGH:
       return
    print("Der Bewegungsmelder hat eine Bewegung erkannt.")
 
-#async def main():
-#    def my_callback():
-#        print(f"Callback executed at {time.strftime('%X')}")
 
-#    print(f"Starting timer at {time.strftime('%X')}")
-#    await async_timer(2, my_callback)  # Set a 2-second timer
-#    print(f"Timer finished at {time.strftime('%X')}")
+# Async Main Loop
+async def main():
+   init()
+   print("init abgeschlossen. Strg+C zum Beenden drücken.")
+   try:
+      while True:
+         await asyncio.sleep(1)  # Main loop
+         # Hier können weitere async Aufgaben hinzugefügt werden
+   except KeyboardInterrupt:
+      print("Beendet mit Strg+C")
+   except Exception as e:
+      print(f"Fehler: {e}")
+   finally:
+      GPIO.cleanup()
+      print("GPIO aufgeräumt.")
 
-#if __name__ == "__main__":
-#    asyncio.run(main())
-
-# Main
-init()
-print("init abgeschlossen. Strg+C zum Beenden drücken.")
-#setOutputWithRuntime(5,Q2, GPIO.LOW)
-
-
-try:
-    while True:
-      time.sleep(1)  # Main loop
-#       if laufzeitWaechter == true:
-#
-#         startZeit = gmtime()
-#
-#       if (startZeit + 120) <  gmtime():
-#          print("laufzeitabgeschlossen")
-#
-#      if GPIO.input(I01) == GPIO.HIGH and GPIO.input(Q1) == GPIO.LOW: # Kleppe links ist zu und Antrieb fährt
-#         GPIO.output(Q1, GPIO.HIGH)
-#
-#      if GPIO.input(I02) == GPIO.HIGH and GPIO.input(Q2) == GPIO.LOW: # Klappe links ist offen und Antrieb fährt
-#         GPIO.output(Q2, GPIO.HIGH)
-#
-#      if GPIO.input(I03) == GPIO.HIGH and GPIO.input(Q3) == GPIO.LOW: # Klappe rechts ist zu und Antrieb fährt
-#         GPIO.output(Q3, GPIO.HIGH)
-
-#      if GPIO.input(I04) == GPIO.HIGH and GPIO.input(Q4) == GPIO.LOW: # Klappe rechts ist offen und Antrieb fährt
-#         GPIO.output(Q4, GPIO.HIGH)
-#
-#      time.sleep(1) # Wartet 1 Sekunden
-#      if GPIO.input(I1) == GPIO.HIGH: # Klappe rechts ist offen und Antrieb fährt
-#         GPIO.output(Q1, GPIO.HIGH)
-#         time.sleep(1) # Wartet 1 Sekunden
-#      if GPIO.output(
-#         GPIO.output(Q1, GPIO.LOW)
-
-
-
-
-except KeyboardInterrupt:
-    # Wenn das Programm mit Ctrl+C beendet wird, setzen Sie die Pins zurück
-    GPIO.cleanup()
+if __name__ == "__main__":
+   asyncio.run(main())
