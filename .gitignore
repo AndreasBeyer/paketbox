@@ -75,3 +75,7 @@ Thumbs.db
 *.tmp
 *.bak
 *.backup
+
+# Logs
+paketbox.log
+*.log
