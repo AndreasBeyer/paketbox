@@ -381,6 +381,12 @@ async def main():
    timer = threading.Timer(closure_timer_seconds-2, mock_klappen_öffnen)
    timer.start()
 
+   def mock_klappen_schließen():
+      pbox_state.set_left_door(DoorState.CLOSED)
+      pbox_state.set_right_door(DoorState.CLOSED) 
+   timer2 = threading.Timer((closure_timer_seconds*2)-2, mock_klappen_schließen)
+   timer2.start()
+
    try:
       while True:
          await asyncio.sleep(1)  # Main loop
