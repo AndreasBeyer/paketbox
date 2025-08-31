@@ -75,6 +75,7 @@ class TestPaketBox(unittest.TestCase):
         
         # Simulate flaps opening successfully and execute callback
         pbox_state.set_left_door(DoorState.OPEN)
+        pbox_state.set_right_door(DoorState.OPEN)  # Both doors must be OPEN
         if endlagen_callback:
             endlagen_callback()
         
