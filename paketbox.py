@@ -1,11 +1,11 @@
 # Paketbox control script
-# Version 0.1.0
+# Version 0.1.1
 
 # region State Management
 from enum import Enum, auto
 
-closure_timer_seconds = 65
-motor_reverse_signal = 64
+closure_timer_seconds = 10
+motor_reverse_signal = closure_timer_seconds - 1
 class DoorState(Enum):
    CLOSED = auto()
    OPEN = auto()
@@ -61,6 +61,13 @@ class PaketBoxState:
       with self._lock:
          self.paket_tuer = state
 
+   def is_open(self):
+       with self._lock:
+         return all([
+            self.left_door == DoorState.OPEN,
+            self.right_door == DoorState.OPEN
+         ])
+   
    def is_all_closed(self):
       with self._lock:
          return all([
@@ -149,6 +156,11 @@ def init():
    GPIO.setup(I09, GPIO.IN)
    GPIO.setup(I10, GPIO.IN)
    GPIO.setup(I11, GPIO.IN)
+
+   # Setze pbox_state entsprechend Hardwarezustand
+   pbox_state.set_left_door(DoorState.OPEN if GPIO.input(I02) == GPIO.HIGH else DoorState.CLOSED)
+   pbox_state.set_right_door(DoorState.OPEN if GPIO.input(I04) == GPIO.HIGH else DoorState.CLOSED)
+   pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(I05) == GPIO.HIGH else DoorState.CLOSED)
 
    #Interrupt
    GPIO.add_event_detect(I01, GPIO.RISING, callback=handleLeftFlapClosed, bouncetime=200) # EndsensorKlappe links geschlossen
@@ -321,6 +333,7 @@ def Klappen_schliessen():
         else:
             pbox_state.set_right_door(DoorState.CLOSED) # Fake right_door hardware error
             print("Klappen erfolgreich geschlossen.")
+            unlockDoor()
 
     timer = threading.Timer(closure_timer_seconds, endlagen_pruefung_closing)
     timer.start()
@@ -334,9 +347,10 @@ def Paket_Tuer_Zusteller_geschlossen():
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 def Paket_Tuer_Zusteller_geoeffnet():
-    if GPIO.input(I01) == GPIO.HIGH or GPIO.input(I03) == GPIO.HIGH:
-        Klappen_schliessen()
-        print("Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
+    if pbox_state.is_open():
+         print(f"Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
+         Klappen_schliessen()
+
     print("Türe Paketzusteller wurde geöffnet:")
 
 def Klappen_oeffnen():
@@ -357,17 +371,20 @@ def Klappen_oeffnen():
         else:
             pbox_state.set_right_door(DoorState.OPEN) # Fake right_door hardware error
             print("Klappen erfolgreich geöffnet.")
-            def Klappen_wieder_zu():
-               print("Starte automatisches Schließen der Klappen..." + str(pbox_state.left_door))
-               if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
-                  Klappen_schliessen()
-               else:
-                   print(f"Fehler: Klappen immer noch im DoorState.OPEN!")
-            timer = threading.Timer(closure_timer_seconds, Klappen_wieder_zu)
-            timer.start()
+            print("Starte automatisches Schließen der Klappen..." + str(pbox_state.left_door))
+            if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
+               Klappen_schliessen()
+            else:
+               print(f"Fehler: Klappen immer noch im DoorState.OPEN!")
 
     timer = threading.Timer(closure_timer_seconds, endlagen_pruefung)
     timer.start()
+
+def ResetDoors():
+    if pbox_state.is_open():
+       print("Resetting doors...")
+       lockDoor()
+       Klappen_schliessen()
 
 # endregion
 
@@ -375,7 +392,7 @@ def Klappen_oeffnen():
 async def main():
    init()
    print("init abgeschlossen. Strg+C zum Beenden drücken.")
- 
+   ResetDoors()
    # Klappen_oeffnen()
    # def mock_klappen_öffnen():
    #    pbox_state.set_left_door(DoorState.OPEN)
