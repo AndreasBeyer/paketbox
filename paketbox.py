@@ -4,6 +4,8 @@
 # region State Management
 from enum import Enum, auto
 
+closure_timer_seconds = 10
+motor_reverse_signal = 5
 class DoorState(Enum):
    CLOSED = auto()
    OPEN = auto()
@@ -162,27 +164,14 @@ def init():
    GPIO.add_event_detect(I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
 
 def setOutputWithRuntime(runtime, gpio, state):
-    """
-    Sets the output state of a specified GPIO pin and schedules a delayed toggle.
-
-    Args:
-        runtime (float): The delay time in seconds before toggling the GPIO pin state.
-        gpio (int): The GPIO pin number to set.
-        state (bool): The initial state to set for the GPIO pin.
-
-    Side Effects:
-        Changes the state of the specified GPIO pin immediately and schedules a delayed toggle of its state.
-
-    Note:
-        Assumes that the GPIO library is properly initialized and gpio_delayed is defined elsewhere.
-    """
     GPIO.output(gpio, state)
-    gpio_delayed(runtime, gpio, ~state)
+    def relaise_ausschalten(state):
+         stateREv = ~state
+         GPIO.output(gpio, stateREv)
+         print("GPIO " + str(gpio) + " zurückschalten zu " + str(stateREv))
+    timer = threading.Timer(runtime, relaise_ausschalten, args=(state, ))
+    timer.start()
 
-def gpio_delayed(delay, gpio, state): # delay in Sekunden
-    time.sleep(delay)
-    GPIO.output(gpio, state)
-    print("GPIO " + str(gpio) + " geschalten zu " + str(state))
 
 # region Callsbacks
 def handleLeftFlapClosed(channel):
@@ -321,13 +310,25 @@ def Klappen_schliessen():
         print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
         return
     print("Klappen fahren zu")
-    setOutputWithRuntime(62, Q1, GPIO.LOW)
-    setOutputWithRuntime(62, Q3, GPIO.LOW)
+    setOutputWithRuntime(closure_timer_seconds, Q1, GPIO.LOW)
+    setOutputWithRuntime(closure_timer_seconds, Q3, GPIO.LOW)
+    def endlagen_pruefung_closing():
+        # if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
+        if not (pbox_state.left_door == DoorState.CLOSED): # Fake right_door hardware error
+            print(f"Fehler: Klappen nicht geschlossen nach Schließungsversuch!")
+            pbox_state.set_left_door(DoorState.ERROR)
+            pbox_state.set_right_door(DoorState.ERROR)
+        else:
+            pbox_state.set_right_door(DoorState.CLOSED) # Fake right_door hardware error
+            print("Klappen erfolgreich geschlossen.")
+
+    timer = threading.Timer(closure_timer_seconds, endlagen_pruefung_closing)
+    timer.start()
 
 def Paket_Tuer_Zusteller_geschlossen():
     print("Türe Paketzusteller wurde geschlossen.")
-    lockDoor()
     time.sleep(10)
+    lockDoor()
     print("Starte Öffnen der Klappen...")
     Klappen_oeffnen()
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
@@ -343,17 +344,28 @@ def Klappen_oeffnen():
         print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
         return
     print("Klappen fahren auf")
-    setOutputWithRuntime(62, Q2, GPIO.LOW)
-    setOutputWithRuntime(62, Q4, GPIO.LOW)
+
+    setOutputWithRuntime(motor_reverse_signal, Q2, GPIO.LOW)
+    setOutputWithRuntime(motor_reverse_signal, Q4, GPIO.LOW)
     # Endlagenprüfung nach fixer Zeit in einem Timer
     def endlagen_pruefung():
-        if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
-            print("Fehler: Klappen nicht offen nach Öffnungsversuch!")
+        # if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
+        if not (pbox_state.left_door == DoorState.OPEN): # Fake right_door hardware error
+            print(f"Fehler: Klappen nicht offen nach Öffnungsversuch!")
             pbox_state.set_left_door(DoorState.ERROR)
             pbox_state.set_right_door(DoorState.ERROR)
         else:
+            pbox_state.set_right_door(DoorState.OPEN) # Fake right_door hardware error
             print("Klappen erfolgreich geöffnet.")
-    timer = threading.Timer(62, endlagen_pruefung)
+            def Klappen_wieder_zu():
+               if pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN:
+                  Klappen_schliessen()
+               else:
+                   print(f"Fehler: Klappen immer noch im DoorState.OPEN!")
+            timer = threading.Timer(closure_timer_seconds, Klappen_wieder_zu)
+            timer.start()
+
+    timer = threading.Timer(closure_timer_seconds, endlagen_pruefung)
     timer.start()
 
 # endregion
@@ -362,6 +374,13 @@ def Klappen_oeffnen():
 async def main():
    init()
    print("init abgeschlossen. Strg+C zum Beenden drücken.")
+   Klappen_oeffnen()
+   def mock_klappen_öffnen():
+      pbox_state.set_left_door(DoorState.OPEN)
+      pbox_state.set_right_door(DoorState.OPEN) 
+   timer = threading.Timer(closure_timer_seconds-2, mock_klappen_öffnen)
+   timer.start()
+
    try:
       while True:
          await asyncio.sleep(1)  # Main loop
