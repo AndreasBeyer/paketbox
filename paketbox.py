@@ -1,3 +1,6 @@
+# Paketbox control script
+# Version 0.0.2
+
 # region State Management
 from enum import Enum, auto
 
@@ -7,7 +10,35 @@ class DoorState(Enum):
    ERROR = auto()
 
 
-import RPi.GPIO as GPIO
+
+try:
+   import RPi.GPIO as GPIO
+except ImportError:
+   import sys
+   import types
+   class MockGPIO:
+      BCM = 'BCM'
+      OUT = 'OUT'
+      IN = 'IN'
+      HIGH = 1
+      LOW = 0
+      RISING = 'RISING'
+      FALLING = 'FALLING'
+      BOTH = 'BOTH'
+      def setmode(self, mode):
+         print(f"[MOCK] GPIO setmode({mode})")
+      def setup(self, pin, mode):
+         print(f"[MOCK] GPIO setup(pin={pin}, mode={mode})")
+      def output(self, pin, state):
+         print(f"[MOCK] GPIO output(pin={pin}, state={state})")
+      def input(self, pin):
+         print(f"[MOCK] GPIO input(pin={pin}) -> LOW")
+         return self.LOW
+      def add_event_detect(self, pin, edge, callback=None, bouncetime=200):
+         print(f"[MOCK] GPIO add_event_detect(pin={pin}, edge={edge}, bouncetime={bouncetime})")
+      def cleanup(self):
+         print(f"[MOCK] GPIO cleanup()")
+   GPIO = MockGPIO()
 import time
 import asyncio
 import threading
@@ -319,7 +350,7 @@ def Paket_Tuer_Zusteller_geschlossen():
    # Audiofile: Die Box wird sich in 10 Sekunden verriegeln. Wenn noch neue Pakete abgegeben werden sollen Türe wieder öffnen.
    lockDoor()
    time.sleep(10)
-   Klappen_oeffnen()
+   asyncio.create_task(Klappen_oeffnen())
    # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 def Paket_Tuer_Zusteller_geoeffnet():
