@@ -30,7 +30,7 @@ Dieses Projekt steuert eine intelligente Paketbox mit einem Raspberry Pi. Die Bo
 1. **Python 3** installieren (3.7+)
 2. **Repository klonen**:
    ```bash
-   git clone https://github.com/AndreasBeyer/max_paket_box.git
+   git clone https://github.com/AndreasBeyer/paketbox.git
    cd max_paket_box
    ```
 3. **Automatische Versionierung einrichten**:
