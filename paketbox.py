@@ -155,100 +155,139 @@ async def gpio_delayed(delay, gpio, state): # delay in Sekunden
    print("GPIO " + gpio + " geschalten zu " + state)
 
 # region Callsbacks
-async def handleLeftFlapClosed(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   pbox_state.set_left_door(DoorState.CLOSED)
-   print("Entleerungsklappe links ist geschlossen")
-
-
-async def handleLeftFLapOpened(channel):
-    await asyncio.sleep(0.2)
-    if GPIO.input(channel) == GPIO.HIGH:
-       return
-    pbox_state.set_left_door(DoorState.OPEN)
-    print("Entleerungsklappe links ist geöffnet")
-
-
-async def handleRightFlapClosed(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   pbox_state.set_right_door(DoorState.CLOSED)
-   print("Entleerungsklappe rechts ist geschlossen")
-
-async def handleRightFlapOpened(channel):
-    await asyncio.sleep(0.2)
-    if GPIO.input(channel) == GPIO.HIGH:
-         return # Entprellen
-    pbox_state.set_right_door(DoorState.OPEN)
-    print("Entleerungsklappe links ist geöffnet")
-
-async def handleDeliveryDoorStatus(channel):
-   if GPIO.input(channel):
-      await asyncio.sleep(0.2)
+def handleLeftFlapClosed(channel):
+   try:
+      time.sleep(0.2)
       if GPIO.input(channel) == GPIO.HIGH:
          return
-      pbox_state.set_paket_tuer(DoorState.OPEN)
-      await Paket_Tuer_Zusteller_geoeffnet()
-   else:
-      await asyncio.sleep(0.2)
+      pbox_state.set_left_door(DoorState.CLOSED)
+      print("Entleerungsklappe links ist geschlossen")
+   except Exception as e:
+      print(f"Hardwarefehler in handleLeftFlapClosed: {e}")
+
+
+def handleLeftFLapOpened(channel):
+    try:
+       time.sleep(0.2)
+       if GPIO.input(channel) == GPIO.HIGH:
+          return
+       pbox_state.set_left_door(DoorState.OPEN)
+       print("Entleerungsklappe links ist geöffnet")
+    except Exception as e:
+       print(f"Hardwarefehler in handleLeftFLapOpened: {e}")
+
+
+def handleRightFlapClosed(channel):
+   try:
+      time.sleep(0.2)
       if GPIO.input(channel) == GPIO.HIGH:
          return
-      pbox_state.set_paket_tuer(DoorState.CLOSED)
-      await Paket_Tuer_Zusteller_geschlossen()
+      pbox_state.set_right_door(DoorState.CLOSED)
+      print("Entleerungsklappe rechts ist geschlossen")
+   except Exception as e:
+      print(f"Hardwarefehler in handleRightFlapClosed: {e}")
 
-async def handleMailboxOpen(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Briefkasten wurde geöffnet")
+def handleRightFlapOpened(channel):
+    try:
+       time.sleep(0.2)
+       if GPIO.input(channel) == GPIO.HIGH:
+            return # Entprellen
+       pbox_state.set_right_door(DoorState.OPEN)
+       print("Entleerungsklappe links ist geöffnet")
+    except Exception as e:
+       print(f"Hardwarefehler in handleRightFlapOpened: {e}")
 
-async def handlePackageBoxDoorOpen(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Die Tür zur Paketentnahme wurde geöffnet")
+def handleDeliveryDoorStatus(channel):
+   try:
+      if GPIO.input(channel):
+         time.sleep(0.2)
+         if GPIO.input(channel) == GPIO.HIGH:
+            return
+         pbox_state.set_paket_tuer(DoorState.OPEN)
+         Paket_Tuer_Zusteller_geoeffnet()
+      else:
+         time.sleep(0.2)
+         if GPIO.input(channel) == GPIO.HIGH:
+            return
+         pbox_state.set_paket_tuer(DoorState.CLOSED)
+         Paket_Tuer_Zusteller_geschlossen()
+   except Exception as e:
+      print(f"Hardwarefehler in handleDeliveryDoorStatus: {e}")
 
-async def handleMailboxDoorOpen(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Die Türe zum Briefe entnehmen wurde geöffnet")
+def handleMailboxOpen(channel):
+   try:
+      time.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      print("Der Briefkasten wurde geöffnet")
+   except Exception as e:
+      print(f"Hardwarefehler in handleMailboxOpen: {e}")
 
-async def handleGartenDoorButton6Press(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
+def handlePackageBoxDoorOpen(channel):
+   try:
+      time.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      print("Die Tür zur Paketentnahme wurde geöffnet")
+   except Exception as e:
+      print(f"Hardwarefehler in handlePackageBoxDoorOpen: {e}")
 
-async def handleGardenDoorButton8Press(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
+def handleMailboxDoorOpen(channel):
+   try:
+      time.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      print("Die Türe zum Briefe entnehmen wurde geöffnet")
+   except Exception as e:
+      print(f"Hardwarefehler in handleMailboxDoorOpen: {e}")
 
-async def handleMotionDetection(channel):
-   await asyncio.sleep(0.2)
-   if GPIO.input(channel) == GPIO.HIGH:
-      return
-   print("Der Bewegungsmelder hat eine Bewegung erkannt.")
+def handleGartenDoorButton6Press(channel):
+   try:
+      time.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      print("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
+   except Exception as e:
+      print(f"Hardwarefehler in handleGartenDoorButton6Press: {e}")
+
+def handleGardenDoorButton8Press(channel):
+   try:
+      time.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      print("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
+   except Exception as e:
+      print(f"Hardwarefehler in handleGardenDoorButton8Press: {e}")
+
+def handleMotionDetection(channel):
+   try:
+      time.sleep(0.2)
+      if GPIO.input(channel) == GPIO.HIGH:
+         return
+      print("Der Bewegungsmelder hat eine Bewegung erkannt.")
+   except Exception as e:
+      print(f"Hardwarefehler in handleMotionDetection: {e}")
 
 # endregion
 
 # region Actions
 
 def unlockDoor():
-   GPIO.output(Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
-   print("Türe Paketzusteller wurde entriegelt.")
+   try:
+      GPIO.output(Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
+      print("Türe Paketzusteller wurde entriegelt.")
+   except Exception as e:
+      print(f"Hardwarefehler in unlockDoor: {e}")
 
 def lockDoor():
-   GPIO.output(Q8, GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
-   print("Türe Paketzusteller wurde verriegelt.")
+   try:
+      GPIO.output(Q8, GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
+      print("Türe Paketzusteller wurde verriegelt.")
+   except Exception as e:
+      print(f"Hardwarefehler in lockDoor: {e}")
 
 async def Klappen_schliessen():
-   if pbox_state.is_any_error:
+   if pbox_state.is_any_error():
       print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
       return
    print("Klappen fahren zu")
@@ -275,17 +314,17 @@ async def Klappen_oeffnen():
          print("Klappen erfolgreich geöffnet.")
    asyncio.create_task(klappen_open_check())
 
-async def Paket_Tuer_Zusteller_geschlossen():
+def Paket_Tuer_Zusteller_geschlossen():
    print("Türe Paketzusteller wurde geschlossen.")
    # Audiofile: Die Box wird sich in 10 Sekunden verriegeln. Wenn noch neue Pakete abgegeben werden sollen Türe wieder öffnen.
    lockDoor()
-   await asyncio.sleep(10)
-   await Klappen_oeffnen()
+   time.sleep(10)
+   Klappen_oeffnen()
    # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
-async def Paket_Tuer_Zusteller_geoeffnet():
+def Paket_Tuer_Zusteller_geoeffnet():
    if GPIO.input(I01) == GPIO.HIGH or GPIO.input(I03) == GPIO.HIGH:
-      await Klappen_schliessen()
+      Klappen_schliessen()
       print("Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
 
    # Audiofile: Funktion der Paketbox
