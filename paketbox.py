@@ -179,10 +179,10 @@ def setOutputWithRuntime(runtime, gpio, state):
     GPIO.output(gpio, state)
     gpio_delayed(runtime, gpio, ~state)
 
-async def gpio_delayed(delay, gpio, state): # delay in Sekunden
-   await asyncio.sleep(delay)
-   GPIO.output(gpio,state)
-   print("GPIO " + gpio + " geschalten zu " + state)
+def gpio_delayed(delay, gpio, state): # delay in Sekunden
+    time.sleep(delay)
+    GPIO.output(gpio, state)
+    print("GPIO " + str(gpio) + " geschalten zu " + str(state))
 
 # region Callsbacks
 def handleLeftFlapClosed(channel):
