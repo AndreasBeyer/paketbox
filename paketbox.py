@@ -4,7 +4,7 @@
 # region State Management
 from enum import Enum, auto
 
-closure_timer_seconds = 10
+closure_timer_seconds = 65
 motor_reverse_signal = closure_timer_seconds - 1
 class DoorState(Enum):
    CLOSED = auto()
@@ -392,7 +392,7 @@ def ResetDoors():
 async def main():
    init()
    print("init abgeschlossen. Strg+C zum Beenden drücken.")
-   ResetDoors()
+   # ResetDoors()
    # Klappen_oeffnen()
    # def mock_klappen_öffnen():
    #    pbox_state.set_left_door(DoorState.OPEN)
