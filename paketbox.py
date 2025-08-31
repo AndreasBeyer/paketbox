@@ -1,5 +1,5 @@
 # Paketbox control script
-# Version 0.0.2
+# Version 0.0.3
 
 # region State Management
 from enum import Enum, auto
