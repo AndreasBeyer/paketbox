@@ -322,16 +322,16 @@ async def Klappen_schliessen():
       print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
       return
    print("Klappen fahren zu")
-   await setOutputWithRuntime(62, Q1, GPIO.LOW)
-   await setOutputWithRuntime(62, Q3, GPIO.LOW)
+   setOutputWithRuntime(62, Q1, GPIO.LOW)
+   setOutputWithRuntime(62, Q3, GPIO.LOW)
 
 async def Klappen_oeffnen():
    if pbox_state.is_any_error():
       print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
       return
    print("Klappen fahren auf")
-   await setOutputWithRuntime(62, Q2, GPIO.LOW)
-   await setOutputWithRuntime(62, Q4, GPIO.LOW)
+   setOutputWithRuntime(62, Q2, GPIO.LOW)
+   setOutputWithRuntime(62, Q4, GPIO.LOW)
    # Starte Timer mit Callback zur Endlagenprüfung
    async def klappen_open_check():
       await asyncio.sleep(62)  # Wartezeit in Sekunden für Endlagenprüfung 
@@ -350,12 +350,13 @@ def Paket_Tuer_Zusteller_geschlossen():
    # Audiofile: Die Box wird sich in 10 Sekunden verriegeln. Wenn noch neue Pakete abgegeben werden sollen Türe wieder öffnen.
    lockDoor()
    time.sleep(10)
+   print("Starte Öffnen der Klappen...")
    asyncio.create_task(Klappen_oeffnen())
    # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 def Paket_Tuer_Zusteller_geoeffnet():
    if GPIO.input(I01) == GPIO.HIGH or GPIO.input(I03) == GPIO.HIGH:
-      Klappen_schliessen()
+      asyncio.create_task(Klappen_schliessen())
       print("Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
 
    # Audiofile: Funktion der Paketbox
