@@ -7,7 +7,7 @@ import time
 # Importiere die wichtigsten Symbole aus dem Hauptscript
 from paketbox import (
     pbox_state, DoorState,
-    handleLeftFlapClosed, handleLeftFLapOpened,
+    handleLeftFlapClosed, handleLeftFlapOpened,
     handleRightFlapClosed, handleRightFlapOpened,
     handleDeliveryDoorStatus, handleMailboxOpen,
     handlePackageBoxDoorOpen, handleMailboxDoorOpen,
@@ -31,9 +31,9 @@ class TestPaketBox(unittest.TestCase):
 
     @patch('paketbox.GPIO')
     @patch('paketbox.time.sleep')
-    def test_handleLeftFLapOpened(self, mock_sleep, mock_gpio):
+    def test_handleLeftFlapOpened(self, mock_sleep, mock_gpio):
         mock_gpio.input.return_value = mock_gpio.LOW
-        handleLeftFLapOpened(17)
+        handleLeftFlapOpened(17)
         self.assertEqual(pbox_state.left_door, DoorState.OPEN)
 
     @patch('paketbox.GPIO')
@@ -466,7 +466,7 @@ class TestPaketBoxIntegration(unittest.TestCase):
         # Test left flap events
         test_cases = [
             (handleLeftFlapClosed, 27, DoorState.CLOSED),
-            (handleLeftFLapOpened, 17, DoorState.OPEN),
+            (handleLeftFlapOpened, 17, DoorState.OPEN),
             (handleRightFlapClosed, 9, DoorState.CLOSED),
             (handleRightFlapOpened, 22, DoorState.OPEN),
         ]
