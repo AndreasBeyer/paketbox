@@ -1,11 +1,11 @@
 # Paketbox control script
-# Version 0.0.5
+# Version 0.1.0
 
 # region State Management
 from enum import Enum, auto
 
-closure_timer_seconds = 10
-motor_reverse_signal = 5
+closure_timer_seconds = 65
+motor_reverse_signal = 64
 class DoorState(Enum):
    CLOSED = auto()
    OPEN = auto()
@@ -358,7 +358,8 @@ def Klappen_oeffnen():
             pbox_state.set_right_door(DoorState.OPEN) # Fake right_door hardware error
             print("Klappen erfolgreich geöffnet.")
             def Klappen_wieder_zu():
-               if pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN:
+               print("Starte automatisches Schließen der Klappen..." + str(pbox_state.left_door))
+               if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
                   Klappen_schliessen()
                else:
                    print(f"Fehler: Klappen immer noch im DoorState.OPEN!")
@@ -374,18 +375,20 @@ def Klappen_oeffnen():
 async def main():
    init()
    print("init abgeschlossen. Strg+C zum Beenden drücken.")
-   Klappen_oeffnen()
-   def mock_klappen_öffnen():
-      pbox_state.set_left_door(DoorState.OPEN)
-      pbox_state.set_right_door(DoorState.OPEN) 
-   timer = threading.Timer(closure_timer_seconds-2, mock_klappen_öffnen)
-   timer.start()
+ 
+   # Klappen_oeffnen()
+   # def mock_klappen_öffnen():
+   #    pbox_state.set_left_door(DoorState.OPEN)
+   #    pbox_state.set_right_door(DoorState.OPEN) 
+   # timer = threading.Timer(closure_timer_seconds-2, mock_klappen_öffnen)
+   # timer.start()
 
-   def mock_klappen_schließen():
-      pbox_state.set_left_door(DoorState.CLOSED)
-      pbox_state.set_right_door(DoorState.CLOSED) 
-   timer2 = threading.Timer((closure_timer_seconds*2)-2, mock_klappen_schließen)
-   timer2.start()
+   # def mock_klappen_schließen():
+   #    print("Mock: Klappen schließen")
+   #    pbox_state.set_left_door(DoorState.CLOSED)
+   #    pbox_state.set_right_door(DoorState.CLOSED) 
+   # timer2 = threading.Timer((closure_timer_seconds*2)+2, mock_klappen_schließen)
+   # timer2.start() 
 
    try:
       while True:
