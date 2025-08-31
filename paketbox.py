@@ -9,8 +9,6 @@ class DoorState(Enum):
    OPEN = auto()
    ERROR = auto()
 
-
-
 try:
    import RPi.GPIO as GPIO
 except ImportError:
@@ -42,6 +40,7 @@ except ImportError:
 import time
 import asyncio
 import threading
+import sys
 
 class PaketBoxState:
    def __init__(self):
@@ -317,50 +316,45 @@ def lockDoor():
    except Exception as e:
       print(f"Hardwarefehler in lockDoor: {e}")
 
-async def Klappen_schliessen():
-   if pbox_state.is_any_error():
-      print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
-      return
-   print("Klappen fahren zu")
-   setOutputWithRuntime(62, Q1, GPIO.LOW)
-   setOutputWithRuntime(62, Q3, GPIO.LOW)
-
-async def Klappen_oeffnen():
-   if pbox_state.is_any_error():
-      print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
-      return
-   print("Klappen fahren auf")
-   setOutputWithRuntime(62, Q2, GPIO.LOW)
-   setOutputWithRuntime(62, Q4, GPIO.LOW)
-   # Starte Timer mit Callback zur Endlagenprüfung
-   async def klappen_open_check():
-      await asyncio.sleep(62)  # Wartezeit in Sekunden für Endlagenprüfung 
-      # Hardware Prüfung, ob beide Klappen offen sind
-
-      if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
-         print("Fehler: Klappen nicht offen nach Öffnungsversuch!")
-         pbox_state.set_left_door(DoorState.ERROR)
-         pbox_state.set_right_door(DoorState.ERROR)
-      else:
-         print("Klappen erfolgreich geöffnet.")
-   asyncio.create_task(klappen_open_check())
+def Klappen_schliessen():
+    if pbox_state.is_any_error():
+        print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
+        return
+    print("Klappen fahren zu")
+    setOutputWithRuntime(62, Q1, GPIO.LOW)
+    setOutputWithRuntime(62, Q3, GPIO.LOW)
 
 def Paket_Tuer_Zusteller_geschlossen():
-   print("Türe Paketzusteller wurde geschlossen.")
-   # Audiofile: Die Box wird sich in 10 Sekunden verriegeln. Wenn noch neue Pakete abgegeben werden sollen Türe wieder öffnen.
-   lockDoor()
-   time.sleep(10)
-   print("Starte Öffnen der Klappen...")
-   asyncio.create_task(Klappen_oeffnen())
-   # Audiofile: Box wird geleert, dies dauert 2 Minuten
+    print("Türe Paketzusteller wurde geschlossen.")
+    lockDoor()
+    time.sleep(10)
+    print("Starte Öffnen der Klappen...")
+    Klappen_oeffnen()
+    # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 def Paket_Tuer_Zusteller_geoeffnet():
-   if GPIO.input(I01) == GPIO.HIGH or GPIO.input(I03) == GPIO.HIGH:
-      asyncio.create_task(Klappen_schliessen())
-      print("Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
+    if GPIO.input(I01) == GPIO.HIGH or GPIO.input(I03) == GPIO.HIGH:
+        Klappen_schliessen()
+        print("Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
+    print("Türe Paketzusteller wurde geöffnet:")
 
-   # Audiofile: Funktion der Paketbox
-   print("Türe Paketzusteller wurde geöffnet:")
+def Klappen_oeffnen():
+    if pbox_state.is_any_error():
+        print("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
+        return
+    print("Klappen fahren auf")
+    setOutputWithRuntime(62, Q2, GPIO.LOW)
+    setOutputWithRuntime(62, Q4, GPIO.LOW)
+    # Endlagenprüfung nach fixer Zeit in einem Timer
+    def endlagen_pruefung():
+        if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
+            print("Fehler: Klappen nicht offen nach Öffnungsversuch!")
+            pbox_state.set_left_door(DoorState.ERROR)
+            pbox_state.set_right_door(DoorState.ERROR)
+        else:
+            print("Klappen erfolgreich geöffnet.")
+    timer = threading.Timer(62, endlagen_pruefung)
+    timer.start()
 
 # endregion
 
@@ -375,7 +369,7 @@ async def main():
    except KeyboardInterrupt:
       print("Beendet mit Strg+C")
    except Exception as e:
-      print(f"Fehler: {e}")
+      print(f"[Main] Fehler: {e}")
    finally:
       GPIO.cleanup()
       print("GPIO aufgeräumt.")
