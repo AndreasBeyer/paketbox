@@ -59,11 +59,14 @@ class TestPaketBox(unittest.TestCase):
         mock_gpio.LOW = 0
         mock_gpio.HIGH = 1
         
+        # Mock setOutputWithRuntime to return True (success)
+        mock_setOutput.return_value = True
+        
         # Setup timer mock to capture the endlagen_pruefung callback
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds and args is None:  # This is endlagen_pruefung
+            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -93,11 +96,14 @@ class TestPaketBox(unittest.TestCase):
         mock_gpio.LOW = 0
         mock_gpio.HIGH = 1
         
+        # Mock setOutputWithRuntime to return True (success)
+        mock_setOutput.return_value = True
+        
         # Setup timer mock to capture the endlagen_pruefung callback
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds and args is None:  # This is endlagen_pruefung
+            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -129,11 +135,14 @@ class TestPaketBox(unittest.TestCase):
         mock_gpio.LOW = 0
         mock_gpio.HIGH = 1
         
+        # Mock setOutputWithRuntime to return True (success)
+        mock_setOutput.return_value = True
+        
         # Setup timer mock to capture the endlagen_pruefung_closing callback
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds and args is None:  # This is endlagen_pruefung_closing
+            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung_closing (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -145,6 +154,7 @@ class TestPaketBox(unittest.TestCase):
         
         # Simulate successful closing and execute callback
         pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
         if endlagen_callback:
             endlagen_callback()
         
@@ -166,11 +176,14 @@ class TestPaketBox(unittest.TestCase):
         mock_gpio.LOW = 0
         mock_gpio.HIGH = 1
         
+        # Mock setOutputWithRuntime to return True (success)
+        mock_setOutput.return_value = True
+        
         # Setup timer mock to capture the endlagen_pruefung_closing callback
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds and args is None:  # This is endlagen_pruefung_closing
+            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung_closing (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -228,24 +241,28 @@ class TestPaketBox(unittest.TestCase):
 
     @patch('paketbox.GPIO')
     @patch('paketbox.time.sleep')
-    def test_handleDeliveryDoorStatus_opening(self, mock_sleep, mock_gpio):
+    @patch('paketbox.Paket_Tuer_Zusteller_geoeffnet')  # Mock to avoid side effects
+    def test_handleDeliveryDoorStatus_opening(self, mock_geoeffnet, mock_sleep, mock_gpio):
         """Test delivery door status change to open"""
         # Mock GPIO readings
         mock_gpio.HIGH = 1
         mock_gpio.LOW = 0
-        mock_gpio.input.side_effect = [True, mock_gpio.LOW]  # First call returns True, second returns LOW
+        # Both GPIO.input calls should return the same value for consistent state
+        mock_gpio.input.side_effect = [mock_gpio.HIGH, mock_gpio.HIGH]  # Both calls return HIGH for door opening
         
         handleDeliveryDoorStatus(23)
         self.assertEqual(pbox_state.paket_tuer, DoorState.OPEN)
 
     @patch('paketbox.GPIO')
     @patch('paketbox.time.sleep')
-    def test_handleDeliveryDoorStatus_closing(self, mock_sleep, mock_gpio):
+    @patch('paketbox.Paket_Tuer_Zusteller_geschlossen')  # Mock to avoid side effects
+    def test_handleDeliveryDoorStatus_closing(self, mock_geschlossen, mock_sleep, mock_gpio):
         """Test delivery door status change to closed"""
         # Mock GPIO readings
         mock_gpio.HIGH = 1
         mock_gpio.LOW = 0
-        mock_gpio.input.side_effect = [False, mock_gpio.LOW]  # First call returns False, second returns LOW
+        # Both GPIO.input calls should return the same value for consistent state
+        mock_gpio.input.side_effect = [mock_gpio.LOW, mock_gpio.LOW]  # Both calls return LOW for door closing
         
         handleDeliveryDoorStatus(23)
         self.assertEqual(pbox_state.paket_tuer, DoorState.CLOSED)
@@ -368,12 +385,12 @@ class TestPaketBoxIntegration(unittest.TestCase):
         mock_timer.side_effect = create_timer
         
         # Step 1: Delivery door is opened
-        mock_gpio.input.side_effect = [True, mock_gpio.LOW]  # For door opening
+        mock_gpio.input.side_effect = [mock_gpio.HIGH, mock_gpio.HIGH]  # Both calls return HIGH for door opening
         handleDeliveryDoorStatus(23)
         self.assertEqual(pbox_state.paket_tuer, DoorState.OPEN)
         
         # Step 2: Delivery door is closed (triggers flap opening)
-        mock_gpio.input.side_effect = [False, mock_gpio.LOW]  # For door closing  
+        mock_gpio.input.side_effect = [mock_gpio.LOW, mock_gpio.LOW]  # Both calls return LOW for door closing  
         handleDeliveryDoorStatus(23)
         self.assertEqual(pbox_state.paket_tuer, DoorState.CLOSED)
         
