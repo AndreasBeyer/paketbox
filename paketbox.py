@@ -1,5 +1,5 @@
 # Paketbox control script
-# Version 0.3.1
+# Version 0.3.2
 import time
 import threading
 import sys
@@ -36,7 +36,7 @@ class DoorState(Enum):
    ERROR = auto()
 
 try:
-   import RPi.GPIO as GPIO
+   import RPi.GPIO as GPIO # type: ignore
 except ImportError:
    import sys
    import types
