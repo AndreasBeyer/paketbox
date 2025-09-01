@@ -397,9 +397,10 @@ class TestPaketBoxIntegration(unittest.TestCase):
         # Step 3: Simulate successful flap opening
         # Find and execute the opening endlagen_pruefung callback
         for delay, callback, args in timer_callbacks:
-            if delay == closure_timer_seconds and args is None:
+            if delay == closure_timer_seconds + 1 and args is None:
                 # Simulate flaps opening successfully
                 pbox_state.set_left_door(DoorState.OPEN)
+                pbox_state.set_right_door(DoorState.OPEN)
                 callback()
                 break
         
@@ -429,7 +430,7 @@ class TestPaketBoxIntegration(unittest.TestCase):
         
         # Simulate error by keeping doors closed
         for delay, callback, args in timer_callbacks:
-            if delay == closure_timer_seconds and args is None:
+            if delay == closure_timer_seconds + 1 and args is None:
                 callback()  # Execute without setting doors to OPEN
                 break
         
