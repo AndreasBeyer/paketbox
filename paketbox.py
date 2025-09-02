@@ -69,6 +69,7 @@ class PaketBoxState:
       self.left_door = DoorState.CLOSED
       self.right_door = DoorState.CLOSED
       self.paket_tuer = DoorState.CLOSED
+      self.motor_operation_active = False
 
    def set_left_door(self, state: DoorState):
       with self._lock:
@@ -102,6 +103,16 @@ class PaketBoxState:
             self.right_door == DoorState.ERROR,
             self.paket_tuer == DoorState.ERROR
          ])
+
+   def set_motor_operation(self, active: bool):
+      """Set motor operation flag to suppress non-critical GPIO events during motor operations."""
+      with self._lock:
+         self.motor_operation_active = active
+
+   def is_motor_operation_active(self):
+      """Check if motor operations are currently active."""
+      with self._lock:
+         return self.motor_operation_active
 
    def __str__(self):
       with self._lock:
@@ -283,6 +294,10 @@ def handleMailboxOpen(channel):
       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
       if GPIO.input(channel) == GPIO.HIGH:  # Check if state changed during debounce
          return
+      # Suppress spurious events during motor operations (electrical interference)
+      if pbox_state.is_motor_operation_active():
+         logger.debug("Ignoriere Briefkasten-Öffnung während Motoroperation (Störsignal)")
+         return
       logger.info("Der Briefkasten wurde geöffnet")
    except Exception as e:
       logger.error(f"Hardwarefehler in handleMailboxOpen: {e}")
@@ -291,6 +306,10 @@ def handlePackageBoxDoorOpen(channel):
    try:
       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
       if GPIO.input(channel) == GPIO.HIGH:  # Check if state changed during debounce
+         return
+      # Suppress spurious events during motor operations (electrical interference)
+      if pbox_state.is_motor_operation_active():
+         logger.debug("Ignoriere Paketentnahme-Tür während Motoroperation (Störsignal)")
          return
       logger.info("Die Tür zur Paketentnahme wurde geöffnet")
    except Exception as e:
@@ -301,6 +320,10 @@ def handleMailboxDoorOpen(channel):
       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
       if GPIO.input(channel) == GPIO.HIGH:  # Check if state changed during debounce
          return
+      # Suppress spurious events during motor operations (electrical interference)
+      if pbox_state.is_motor_operation_active():
+         logger.debug("Ignoriere Briefentnahme-Tür während Motoroperation (Störsignal)")
+         return
       logger.info("Die Türe zum Briefe entnehmen wurde geöffnet")
    except Exception as e:
       logger.error(f"Hardwarefehler in handleMailboxDoorOpen: {e}")
@@ -309,6 +332,10 @@ def handleGartenDoorButton6Press(channel):
    try:
       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
       if GPIO.input(channel) == GPIO.LOW:  # Check if button released during debounce
+         return
+      # Suppress spurious events during motor operations (electrical interference)
+      if pbox_state.is_motor_operation_active():
+         logger.debug("Ignoriere Gartentür-Taster 6 während Motoroperation (Störsignal)")
          return
       logger.info("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
    except Exception as e:
@@ -319,6 +346,10 @@ def handleGardenDoorButton8Press(channel):
       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
       if GPIO.input(channel) == GPIO.LOW:  # Check if button released during debounce
          return
+      # Suppress spurious events during motor operations (electrical interference)
+      if pbox_state.is_motor_operation_active():
+         logger.debug("Ignoriere Gartentür-Taster 8 während Motoroperation (Störsignal)")
+         return
       logger.info("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
    except Exception as e:
       logger.error(f"Hardwarefehler in handleGardenDoorButton8Press: {e}")
@@ -327,6 +358,10 @@ def handleMotionDetection(channel):
    try:
       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
       if GPIO.input(channel) == GPIO.LOW:  # Check if motion stopped during debounce
+         return
+      # Suppress spurious events during motor operations (electrical interference)
+      if pbox_state.is_motor_operation_active():
+         logger.debug("Ignoriere Bewegungsmelder während Motoroperation (Störsignal)")
          return
       logger.info("Der Bewegungsmelder hat eine Bewegung erkannt.")
    except Exception as e:
@@ -357,13 +392,23 @@ def Klappen_schliessen():
         return False
     
     logger.info("Klappen fahren zu")
+    # Set motor operation flag to suppress spurious GPIO events during motor startup
+    pbox_state.set_motor_operation(True)
+    
     # Start closing motors
     timer1 = setOutputWithRuntime(closure_timer_seconds, Q1, GPIO.LOW)
     timer2 = setOutputWithRuntime(closure_timer_seconds, Q3, GPIO.LOW)
     
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
+        pbox_state.set_motor_operation(False)  # Clear flag on error
         return False
+    
+    # Clear motor operation flag after brief startup period to allow normal GPIO events
+    def clear_motor_flag():
+        pbox_state.set_motor_operation(False)
+    motor_flag_timer = threading.Timer(1.0, clear_motor_flag)  # Clear after 1 second
+    motor_flag_timer.start()
     
     def endlagen_pruefung_closing():
         """Check end positions after closing timeout."""
@@ -404,13 +449,23 @@ def Klappen_oeffnen():
         return False
 
     logger.info("Klappen fahren auf")
+    # Set motor operation flag to suppress spurious GPIO events during motor startup
+    pbox_state.set_motor_operation(True)
+    
     # Start opening motors
     timer1 = setOutputWithRuntime(motor_reverse_signal, Q2, GPIO.LOW)
     timer2 = setOutputWithRuntime(motor_reverse_signal, Q4, GPIO.LOW)
     
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
+        pbox_state.set_motor_operation(False)  # Clear flag on error
         return False
+    
+    # Clear motor operation flag after brief startup period to allow normal GPIO events
+    def clear_motor_flag():
+        pbox_state.set_motor_operation(False)
+    motor_flag_timer = threading.Timer(1.0, clear_motor_flag)  # Clear after 1 second
+    motor_flag_timer.start()
     
     def endlagen_pruefung():
         """Check end positions after opening timeout."""
