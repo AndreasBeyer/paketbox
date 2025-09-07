@@ -1,5 +1,5 @@
 # Paketbox control script
-# Version 0.3.2
+# Version 0.3.4
 import time
 import threading
 import sys
@@ -175,8 +175,6 @@ def init():
    GPIO.setup(I09, GPIO.IN)
    GPIO.setup(I10, GPIO.IN)
    GPIO.setup(I11, GPIO.IN)
-
-   # Setze pbox_state entsprechend Hardwarezustand
    pbox_state.set_left_door(DoorState.OPEN if GPIO.input(I02) == GPIO.HIGH else DoorState.CLOSED)
    pbox_state.set_right_door(DoorState.OPEN if GPIO.input(I04) == GPIO.HIGH else DoorState.CLOSED)
    pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(I05) == GPIO.HIGH else DoorState.CLOSED)
@@ -189,7 +187,7 @@ def init():
    GPIO.add_event_detect(I05, GPIO.BOTH, callback=handleDeliveryDoorStatus, bouncetime=200) # Paket Tür geöffnet o. geschlossen
    GPIO.add_event_detect(I06, GPIO.FALLING, callback=handleMailboxOpen, bouncetime=200) # Briefkasten Zusteller geoffnet
    GPIO.add_event_detect(I07, GPIO.FALLING, callback=handleMailboxDoorOpen, bouncetime=200) # Briefkasten Entnahme
-   GPIO.add_event_detect(I08, GPIO.FALLING, callback=handlePackageBoxDoorOpen, bouncetime=200) # Paketbox Entnahme
+   GPIO.add_event_detect(I08, GPIO.FALLING, callback=handlePackageBoxDoorClosed, bouncetime=200) # Paketbox Entnahme
    GPIO.add_event_detect(I09, GPIO.RISING, callback=handleGartenDoorButton6Press, bouncetime=200) # Tueroeffner 6
    GPIO.add_event_detect(I10, GPIO.RISING, callback=handleGardenDoorButton8Press, bouncetime=200) # Tueroeffner 8
    GPIO.add_event_detect(I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
@@ -197,25 +195,31 @@ def init():
 def setOutputWithRuntime(runtime, gpio, state):
     """Set GPIO output for specified runtime, then automatically reset to opposite state."""
     try:
-        GPIO.output(gpio, state)
-        def reset_output():
-            opposite_state = GPIO.LOW if state == GPIO.HIGH else GPIO.HIGH
-            GPIO.output(gpio, opposite_state)
-            logger.debug(f"GPIO {gpio} zurückgeschaltet zu {opposite_state}")
+      GPIO.output(gpio, state)
+      def reset_output():
+         opposite_state = GPIO.LOW if state == GPIO.HIGH else GPIO.HIGH
+         GPIO.output(gpio, opposite_state)
+         logger.debug(f"GPIO {gpio} zurückgeschaltet zu {opposite_state}")
         
-        timer = threading.Timer(runtime, reset_output)
-        timer.start()
-        return timer  # Return timer for potential cancellation
+      timer = threading.Timer(runtime, reset_output)
+      timer.start()
+      return timer  # Return timer for potential cancellation
     except Exception as e:
-        logger.error(f"Hardwarefehler in setOutputWithRuntime: {e}")
-        return None
+      logger.error(f"Hardwarefehler in setOutputWithRuntime: {e}")
+      return None
+
+def verifyTriggerAndDebounce(channel, level):
+   for i in range(0,20):
+      time.sleep(0.2)
+      if GPIO.input(channel) == level:  # Signal went back to HIGH = false trigger
+         return False
+   return True 
 
 
 # region Callbacks
 def handleLeftFlapClosed(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.HIGH:  # Signal went back to HIGH = false trigger
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
       pbox_state.set_left_door(DoorState.CLOSED)
       logger.info("Entleerungsklappe links ist geschlossen")
@@ -226,20 +230,18 @@ def handleLeftFlapClosed(channel):
 
 def handleLeftFlapOpened(channel):
     try:
-       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-       if GPIO.input(channel) == GPIO.HIGH:  # Signal went back to HIGH = false trigger
-          return
-       pbox_state.set_left_door(DoorState.OPEN)
-       logger.info("Entleerungsklappe links ist geöffnet")
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
+        return
+      pbox_state.set_left_door(DoorState.OPEN)
+      logger.info("Entleerungsklappe links ist geöffnet")
     except Exception as e:
-       logger.error(f"Hardwarefehler in handleLeftFlapOpened: {e}")
-       pbox_state.set_left_door(DoorState.ERROR)
+      logger.error(f"Hardwarefehler in handleLeftFlapOpened: {e}")
+      pbox_state.set_left_door(DoorState.ERROR)
 
 
 def handleRightFlapClosed(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.HIGH:  # Signal went back to HIGH = false trigger
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
       pbox_state.set_right_door(DoorState.CLOSED)
       logger.info("Entleerungsklappe rechts ist geschlossen")
@@ -249,57 +251,52 @@ def handleRightFlapClosed(channel):
 
 def handleRightFlapOpened(channel):
     try:
-       time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-       if GPIO.input(channel) == GPIO.HIGH:  # Signal went back to HIGH = false trigger
-            return
-       pbox_state.set_right_door(DoorState.OPEN)
-       logger.info("Entleerungsklappe rechts ist geöffnet")
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
+        return
+      pbox_state.set_right_door(DoorState.OPEN)
+      logger.info("Entleerungsklappe rechts ist geöffnet")
     except Exception as e:
-       logger.error(f"Hardwarefehler in handleRightFlapOpened: {e}")
-       pbox_state.set_right_door(DoorState.ERROR)
+      logger.error(f"Hardwarefehler in handleRightFlapOpened: {e}")
+      pbox_state.set_right_door(DoorState.ERROR)
+
 
 def handleDeliveryDoorStatus(channel):
    try:
       current_state = GPIO.input(channel)
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      # Verify state hasn't changed during debounce
-      if GPIO.input(channel) != current_state:
-         return  # State changed during debounce, ignore
-      
+      if not verifyTriggerAndDebounce(channel, ~current_state):
+        return
+
       if current_state == GPIO.HIGH:
          pbox_state.set_paket_tuer(DoorState.OPEN)
          logger.info("Pakettür Zusteller geöffnet")
-         Paket_Tuer_Zusteller_geoeffnet()
+#         Paket_Tuer_Zusteller_geoeffnet()
       else:
          pbox_state.set_paket_tuer(DoorState.CLOSED)
          logger.info("Pakettür Zusteller geschlossen")
-         Paket_Tuer_Zusteller_geschlossen()
+#         Paket_Tuer_Zusteller_geschlossen()
    except Exception as e:
       logger.error(f"Hardwarefehler in handleDeliveryDoorStatus: {e}")
       pbox_state.set_paket_tuer(DoorState.ERROR)
 
 def handleMailboxOpen(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.HIGH:  # Check if state changed during debounce
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
       logger.info("Der Briefkasten wurde geöffnet")
    except Exception as e:
       logger.error(f"Hardwarefehler in handleMailboxOpen: {e}")
 
-def handlePackageBoxDoorOpen(channel):
+def handlePackageBoxDoorClosed(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.HIGH:  # Check if state changed during debounce
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
-      logger.info("Die Tür zur Paketentnahme wurde geöffnet")
+      logger.info("Die Tür zur Paketentnahme wurde geschlossen")
    except Exception as e:
       logger.error(f"Hardwarefehler in handlePackageBoxDoorOpen: {e}")
 
 def handleMailboxDoorOpen(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.HIGH:  # Check if state changed during debounce
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
       logger.info("Die Türe zum Briefe entnehmen wurde geöffnet")
    except Exception as e:
@@ -307,8 +304,7 @@ def handleMailboxDoorOpen(channel):
 
 def handleGartenDoorButton6Press(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.LOW:  # Check if button released during debounce
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
       logger.info("Der Taster an der Paketbox für Gartentürchen Nr. 6 wurde gedrückt")
    except Exception as e:
@@ -316,8 +312,7 @@ def handleGartenDoorButton6Press(channel):
 
 def handleGardenDoorButton8Press(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.LOW:  # Check if button released during debounce
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
          return
       logger.info("Der Taster an der Paketbox für Gartentürchen Nr. 8 wurde gedrückt")
    except Exception as e:
@@ -325,9 +320,8 @@ def handleGardenDoorButton8Press(channel):
 
 def handleMotionDetection(channel):
    try:
-      time.sleep(Config.DEBOUNCE_TIME)  # Debounce delay
-      if GPIO.input(channel) == GPIO.LOW:  # Check if motion stopped during debounce
-         return
+      if not verifyTriggerAndDebounce(channel, GPIO.HIGH):
+        return
       logger.info("Der Bewegungsmelder hat eine Bewegung erkannt.")
    except Exception as e:
       logger.error(f"Hardwarefehler in handleMotionDetection: {e}")
