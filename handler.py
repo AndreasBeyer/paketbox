@@ -2,8 +2,10 @@
 import threading
 from venv import logger
 from config import Config
-from paketbox import DoorState, pbox_state, GPIO
+from paketbox import DoorState, GPIO
 import time 
+from paketbox import pbox_state
+
 
 def pinChanged(pin, oldState, newState):
     if oldState == 0 and newState == 1: # rising edge  

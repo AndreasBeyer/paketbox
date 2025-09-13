@@ -100,8 +100,8 @@ class PaketBoxState:
                f"Pakettür: {self.paket_tuer.name}")
 
 # Initialisiere globalen Zustand
+# Globaler Zustand für PaketBox
 pbox_state = PaketBoxState()
-# endregion
 
 def main():
     """Main application entry point - now synchronous for GPIO compatibility."""
