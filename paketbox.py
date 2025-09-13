@@ -301,9 +301,9 @@ def main():
            for i, pin in enumerate(Config.inputs):
                statusNew[i] = GPIO.input(pin)
                if statusNew[i] != statusOld[i]:
-                   statusOld[i] = statusNew[i]
                    handler.pinChanged(i, statusOld[i], statusNew[i])
                    logger.info(f"GPIO {pin} changed: {statusOld[i]} -> {statusNew[i]}")
+                   statusOld[i] = statusNew[i]
 
 #            # Monitor for error conditions
 #            if pbox_state.is_any_error():
