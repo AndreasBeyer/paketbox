@@ -1,15 +1,14 @@
 # Paketbox control script
-# Version 0.3.4
+# Version 0.4.0
 import time
 import threading
 import sys
 import logging
-from datetime import datetime
 import handler
-from interruptHandler import *
 from config import *
-import config
 from handler import *
+from enum import Enum, auto
+
 
 # Configure logging
 logging.basicConfig(
@@ -21,12 +20,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-closure_timer_seconds = Config.CLOSURE_TIMER_SECONDS
-motor_reverse_signal = Config.MOTOR_REVERSE_SIGNAL
-
-# region State Management
-from enum import Enum, auto
 
 class DoorState(Enum):
    CLOSED = auto()
@@ -54,7 +47,7 @@ except ImportError:
       def output(self, pin, state):
          print(f"[MOCK] GPIO output(pin={pin}, state={state})")
       def input(self, pin):
-         print(f"[MOCK] GPIO input(pin={pin}) -> LOW")
+        # print(f"[MOCK] GPIO input(pin={pin}) -> LOW")
          return self.LOW
       def add_event_detect(self, pin, edge, callback=None, bouncetime=200):
          print(f"[MOCK] GPIO add_event_detect(pin={pin}, edge={edge}, bouncetime={bouncetime})")
@@ -103,198 +96,39 @@ class PaketBoxState:
 
    def __str__(self):
       with self._lock:
-         return (f"Links: {self.left_door.name}, Rechts: {self.right_door.name}, "
+         return (f"Klappe links: {self.left_door.name}, Klappe rechts: {self.right_door.name}, "
                f"Pakettür: {self.paket_tuer.name}")
 
 # Initialisiere globalen Zustand
 pbox_state = PaketBoxState()
 # endregion
 
-def init():
-   # verwende GPIO Nummer statt Board Nummer
-   GPIO.setmode(GPIO.BCM)
-
-   # Setze als Ausgang
-   GPIO.setup(Config.Q1, GPIO.OUT)
-   GPIO.output(Config.Q1, GPIO.HIGH)
-   GPIO.setup(Config.Q2, GPIO.OUT)
-   GPIO.output(Config.Q2, GPIO.HIGH)
-   GPIO.setup(Config.Q3, GPIO.OUT)
-   GPIO.output(Config.Q3, GPIO.HIGH)
-   GPIO.setup(Config.Q4, GPIO.OUT)
-   GPIO.output(Config.Q4, GPIO.HIGH)
-   GPIO.setup(Config.Q6, GPIO.OUT)
-   GPIO.output(Config.Q6, GPIO.HIGH)
-   GPIO.setup(Config.Q8, GPIO.OUT)
-   GPIO.output(Config.Q8, GPIO.HIGH)
-
-   # Setze als Eingang
-   for pin in Config.inputs:
-       GPIO.setup(pin, GPIO.IN)
-
-   pbox_state.set_left_door(DoorState.OPEN if GPIO.input(Config.inputs[1]) == GPIO.HIGH else DoorState.CLOSED)
-   pbox_state.set_right_door(DoorState.OPEN if GPIO.input(Config.inputs[3]) == GPIO.HIGH else DoorState.CLOSED)
-   pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(Config.inputs[4]) == GPIO.HIGH else DoorState.CLOSED)
-
-   #Interrupt
- #  GPIO.add_event_detect(Config.I01, GPIO.RISING, callback=handleLeftFlapClosed, bouncetime=200) # EndsensorKlappe links geschlossen
- #  GPIO.add_event_detect(Config.I02, GPIO.RISING, callback=handleLeftFlapOpened, bouncetime=200) # Endsensor Klappe links geöffnet
- #  GPIO.add_event_detect(Config.I03, GPIO.RISING, callback=handleRightFlapClosed, bouncetime=200) # Endsensor Klappe rechts geschlossen
- #  GPIO.add_event_detect(Config.I04, GPIO.RISING, callback=handleRightFlapOpened, bouncetime=200) # Endsensor Klappe rechts geöffnet
- #  GPIO.add_event_detect(Config.I05, GPIO.BOTH, callback=handleDeliveryDoorStatus, bouncetime=200) # Paket Tür geöffnet o. geschlossen
- #  GPIO.add_event_detect(Config.I06, GPIO.FALLING, callback=handleMailboxOpen, bouncetime=200) # Briefkasten Zusteller geoffnet
- #  GPIO.add_event_detect(Config.I07, GPIO.FALLING, callback=handleMailboxDoorOpen, bouncetime=200) # Briefkasten Entnahme
- #  GPIO.add_event_detect(Config.I08, GPIO.FALLING, callback=handlePackageBoxDoorClosed, bouncetime=200) # Paketbox Entnahme
- #  GPIO.add_event_detect(Config.I09, GPIO.RISING, callback=handleGartenDoorButton6Press, bouncetime=200) # Tueroeffner 6
- #  GPIO.add_event_detect(Config.I10, GPIO.RISING, callback=handleGardenDoorButton8Press, bouncetime=200) # Tueroeffner 8
- #  GPIO.add_event_detect(Config.I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
-
-def setOutputWithRuntime(runtime, gpio, state):
-    """Set GPIO output for specified runtime, then automatically reset to opposite state."""
-    try:
-      GPIO.output(gpio, state)
-      def reset_output():
-         opposite_state = GPIO.LOW if state == GPIO.HIGH else GPIO.HIGH
-         GPIO.output(gpio, opposite_state)
-         logger.debug(f"GPIO {gpio} zurückgeschaltet zu {opposite_state}")
-        
-      timer = threading.Timer(runtime, reset_output)
-      timer.start()
-      return timer  # Return timer for potential cancellation
-    except Exception as e:
-      logger.error(f"Hardwarefehler in setOutputWithRuntime: {e}")
-      return None
-    
-# region Actions
-
-def unlockDoor():
-   try:
-      GPIO.output(Config.Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
-      logger.info("Türe Paketzusteller wurde entriegelt.")
-   except Exception as e:
-      logger.error(f"Hardwarefehler in unlockDoor: {e}")
-
-def lockDoor():
-   try:
-      GPIO.output(Config.Q8, GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
-      logger.info("Türe Paketzusteller wurde verriegelt.")
-   except Exception as e:
-      logger.error(f"Hardwarefehler in lockDoor: {e}")
-
-def Klappen_schliessen():
-    """Close both flaps with proper error handling and state validation."""
-    if pbox_state.is_any_error():
-        logger.warning("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
-        return False
-    
-    logger.info("Klappen fahren zu")
-    # Start closing motors
-    timer1 = setOutputWithRuntime(closure_timer_seconds, Config.Q1, GPIO.LOW)
-    timer2 = setOutputWithRuntime(closure_timer_seconds, Config.Q3, GPIO.LOW)
-    
-    if not timer1 or not timer2:
-        logger.error("Fehler beim Starten der Motoren!")
-        return False
-    
-    def endlagen_pruefung_closing():
-        """Check end positions after closing timeout."""
-        if not (pbox_state.left_door == DoorState.CLOSED and pbox_state.right_door == DoorState.CLOSED):
-            logger.error(f"Fehler: Klappen nicht geschlossen nach Schließungsversuch!")
-            logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
-            pbox_state.set_left_door(DoorState.ERROR)
-            pbox_state.set_right_door(DoorState.ERROR)
-            return False
-        else:
-            logger.info("Klappen erfolgreich geschlossen.")
-            unlockDoor()
-            return True
-
-    timer = threading.Timer(closure_timer_seconds + 1, endlagen_pruefung_closing)
-    timer.start()
-    return True
-
-def Paket_Tuer_Zusteller_geschlossen():
-    logger.info("Türe Paketzusteller wurde geschlossen.")
-    time.sleep(10)
-    lockDoor()
-    logger.info("Starte Öffnen der Klappen...")
-    Klappen_oeffnen()
-    # Audiofile: Box wird geleert, dies dauert 2 Minuten
-
-def Paket_Tuer_Zusteller_geoeffnet():
-    if pbox_state.is_open():
-         logger.warning(f"Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
-         Klappen_schliessen()
-
-    logger.info("Türe Paketzusteller wurde geöffnet:")
-
-def Klappen_oeffnen():
-    """Open both flaps with proper error handling and state validation."""
-    if pbox_state.is_any_error():
-        logger.warning("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
-        return False
-
-    logger.info("Klappen fahren auf")
-    # Start opening motors
-    timer1 = setOutputWithRuntime(motor_reverse_signal, Config.Q2, GPIO.LOW)
-    timer2 = setOutputWithRuntime(motor_reverse_signal, Config.Q4, GPIO.LOW)
-    
-    if not timer1 or not timer2:
-        logger.error("Fehler beim Starten der Motoren!")
-        return False
-    
-    def endlagen_pruefung():
-        """Check end positions after opening timeout."""
-        if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
-            logger.error(f"Fehler: Klappen nicht offen nach Öffnungsversuch!")
-            logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
-            pbox_state.set_left_door(DoorState.ERROR)
-            pbox_state.set_right_door(DoorState.ERROR)
-            return False
-        else:
-            logger.info("Klappen erfolgreich geöffnet.")
-            logger.info(f"Starte automatisches Schließen der Klappen... Status: {pbox_state}")
-            # Auto-close after successful opening
-            if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
-               Klappen_schliessen()
-            else:
-               logger.error(f"Fehler: Klappen nicht beide im OPEN-Zustand!")
-            return True
-
-    timer = threading.Timer(closure_timer_seconds + 1, endlagen_pruefung)
-    timer.start()
-    return True
-
-def ResetDoors():
-    """Reset doors to safe closed state."""
-    logger.info(f"Current door state: {pbox_state}")
-    if pbox_state.is_open():
-       logger.info("Resetting doors to closed state...")
-       lockDoor()
-       return Klappen_schliessen()
-    elif pbox_state.is_any_error():
-       logger.warning("Doors in error state - manual intervention required!")
-       return False
-    else:
-       logger.info("Doors already in safe state.")
-       return True
-
-# endregion
-
 def main():
     """Main application entry point - now synchronous for GPIO compatibility."""
     try:
-        init()
-        logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
-        #ResetDoors()
-        
+        # verwende GPIO Nummer statt Board Nummer
+        GPIO.setmode(GPIO.BCM)
+   
+        # Setze alle Inputs
+        for pin in Config.inputs:
+          GPIO.setup(pin, GPIO.IN)
+        # Setze alle Outputs auf HIGH (Ruhezustand)
+        for output in Config.OUTPUTS:
+          GPIO.setup(output, GPIO.OUT)
+          GPIO.output(output, GPIO.HIGH)
 
         statusOld = [0] * len(Config.inputs)
         statusNew = [0] * len(Config.inputs)
 
-        # Beispiel: Fülle das Array mit aktuellen GPIO-Werten
         for i, pin in enumerate(Config.inputs):
            statusOld[i] = GPIO.input(pin)
+
+        pbox_state.set_left_door(DoorState.OPEN if statusOld[1] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.OPEN if statusOld[3] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
+        logger.info(f"Zustand: {pbox_state}")
+        logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
+        handler.ResetDoors()
         
         while True:
            time.sleep(1)  # Main loop - check system state
