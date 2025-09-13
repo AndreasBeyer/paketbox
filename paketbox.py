@@ -6,6 +6,8 @@ import sys
 import logging
 from datetime import datetime
 from interruptHandler import *
+from config import *
+import config
 
 # Configure logging
 logging.basicConfig(
@@ -17,13 +19,6 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
-
-# Configuration constants
-class Config:
-    CLOSURE_TIMER_SECONDS = 65
-    MOTOR_REVERSE_SIGNAL = CLOSURE_TIMER_SECONDS - 1
-    DEBOUNCE_TIME = 0.2
-    ERROR_REPORT_INTERVAL = 5.0
 
 closure_timer_seconds = Config.CLOSURE_TIMER_SECONDS
 motor_reverse_signal = Config.MOTOR_REVERSE_SIGNAL
@@ -113,85 +108,52 @@ class PaketBoxState:
 pbox_state = PaketBoxState()
 # endregion
 
-# Pinbelegung der Relais
-#  BCM  Stiftpin
-Q1 = 5  #29 Klappe links zu
-Q2 = 6  #31 Klappe links auf
-Q3 = 13 #33 Klappe rechts zu
-Q4 = 16 #36 Klappe rechts auf
-Q5 = 14 #8
-Q6 = 20 #38 Bremse für Tuer
-Q7 = 15 #10
-Q8 = 26 #37 Riegel Tür
-
-# Pinbelegung Eingänge
-I01 = 27 #11 Klappe links zu
-I02 = 17 #13 Klappe links auf
-I03 = 9 #15 Klappe rechts zu
-I04 = 22  #21 Klappe rechts auf
-I05 = 23 #16 Tür Riegelkontakt + Tür Magentkontakt
-I06 = 24 #18 Briefkasten Magnetkontak
-I07 = 25 #22 Briefkasten Türe zum leeren
-I08 = 12 #32 Paketbox Tür zum leeren
-I09 = 8  #24 Türöffner 6 Taster
-I10 = 7  #26 Türffner 8 Taster
-I11 = 11 #23 Bewegungsmelder
-
-# 1-wire Temperatursensor
-# 1-wire    4  7
-
-# I2S Audiokarte
-# LRCLK    19 35
-# BITCLR   18 12
-# DATA OUT 21 40
-# DATA IN  20 38
-
 def init():
    # verwende GPIO Nummer statt Board Nummer
    GPIO.setmode(GPIO.BCM)
 
    # Setze als Ausgang
-   GPIO.setup(Q1, GPIO.OUT)
-   GPIO.output(Q1, GPIO.HIGH)
-   GPIO.setup(Q2, GPIO.OUT)
-   GPIO.output(Q2, GPIO.HIGH)
-   GPIO.setup(Q3, GPIO.OUT)
-   GPIO.output(Q3, GPIO.HIGH)
-   GPIO.setup(Q4, GPIO.OUT)
-   GPIO.output(Q4, GPIO.HIGH)
-   GPIO.setup(Q6, GPIO.OUT)
-   GPIO.output(Q6, GPIO.HIGH)
-   GPIO.setup(Q8, GPIO.OUT)
-   GPIO.output(Q8, GPIO.HIGH)
+   GPIO.setup(Config.Q1, GPIO.OUT)
+   GPIO.output(Config.Q1, GPIO.HIGH)
+   GPIO.setup(Config.Q2, GPIO.OUT)
+   GPIO.output(Config.Q2, GPIO.HIGH)
+   GPIO.setup(Config.Q3, GPIO.OUT)
+   GPIO.output(Config.Q3, GPIO.HIGH)
+   GPIO.setup(Config.Q4, GPIO.OUT)
+   GPIO.output(Config.Q4, GPIO.HIGH)
+   GPIO.setup(Config.Q6, GPIO.OUT)
+   GPIO.output(Config.Q6, GPIO.HIGH)
+   GPIO.setup(Config.Q8, GPIO.OUT)
+   GPIO.output(Config.Q8, GPIO.HIGH)
 
    # Setze als Eingang
-   GPIO.setup(I01, GPIO.IN)
-   GPIO.setup(I02, GPIO.IN)
-   GPIO.setup(I03, GPIO.IN)
-   GPIO.setup(I04, GPIO.IN)
-   GPIO.setup(I05, GPIO.IN)
-   GPIO.setup(I06, GPIO.IN)
-   GPIO.setup(I07, GPIO.IN)
-   GPIO.setup(I08, GPIO.IN)
-   GPIO.setup(I09, GPIO.IN)
-   GPIO.setup(I10, GPIO.IN)
-   GPIO.setup(I11, GPIO.IN)
-   pbox_state.set_left_door(DoorState.OPEN if GPIO.input(I02) == GPIO.HIGH else DoorState.CLOSED)
-   pbox_state.set_right_door(DoorState.OPEN if GPIO.input(I04) == GPIO.HIGH else DoorState.CLOSED)
-   pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(I05) == GPIO.HIGH else DoorState.CLOSED)
+   GPIO.setup(Config.I01, GPIO.IN)
+   GPIO.setup(Config.I02, GPIO.IN)
+   GPIO.setup(Config.I03, GPIO.IN)
+   GPIO.setup(Config.I04, GPIO.IN)
+   GPIO.setup(Config.I05, GPIO.IN)
+   GPIO.setup(Config.I06, GPIO.IN)
+   GPIO.setup(Config.I07, GPIO.IN)
+   GPIO.setup(Config.I08, GPIO.IN)
+   GPIO.setup(Config.I09, GPIO.IN)
+   GPIO.setup(Config.I10, GPIO.IN)
+   GPIO.setup(Config.I11, GPIO.IN)
+   pbox_state.set_left_door(DoorState.OPEN if GPIO.input(Config.I02) == GPIO.HIGH else DoorState.CLOSED)
+   pbox_state.set_right_door(DoorState.OPEN if GPIO.input(Config.I04) == GPIO.HIGH else DoorState.CLOSED)
+   pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(Config.I05) == GPIO.HIGH else DoorState.CLOSED)
 
    #Interrupt
-   GPIO.add_event_detect(I01, GPIO.RISING, callback=handleLeftFlapClosed, bouncetime=200) # EndsensorKlappe links geschlossen
-   GPIO.add_event_detect(I02, GPIO.RISING, callback=handleLeftFlapOpened, bouncetime=200) # Endsensor Klappe links geöffnet
-   GPIO.add_event_detect(I03, GPIO.RISING, callback=handleRightFlapClosed, bouncetime=200) # Endsensor Klappe rechts geschlossen
-   GPIO.add_event_detect(I04, GPIO.RISING, callback=handleRightFlapOpened, bouncetime=200) # Endsensor Klappe rechts geöffnet
-   GPIO.add_event_detect(I05, GPIO.BOTH, callback=handleDeliveryDoorStatus, bouncetime=200) # Paket Tür geöffnet o. geschlossen
-   GPIO.add_event_detect(I06, GPIO.FALLING, callback=handleMailboxOpen, bouncetime=200) # Briefkasten Zusteller geoffnet
-   GPIO.add_event_detect(I07, GPIO.FALLING, callback=handleMailboxDoorOpen, bouncetime=200) # Briefkasten Entnahme
-   GPIO.add_event_detect(I08, GPIO.FALLING, callback=handlePackageBoxDoorClosed, bouncetime=200) # Paketbox Entnahme
-   GPIO.add_event_detect(I09, GPIO.RISING, callback=handleGartenDoorButton6Press, bouncetime=200) # Tueroeffner 6
-   GPIO.add_event_detect(I10, GPIO.RISING, callback=handleGardenDoorButton8Press, bouncetime=200) # Tueroeffner 8
-   GPIO.add_event_detect(I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
+ #  GPIO.add_event_detect(Config.I01, GPIO.RISING, callback=handleLeftFlapClosed, bouncetime=200) # EndsensorKlappe links geschlossen
+ #  GPIO.add_event_detect(Config.I02, GPIO.RISING, callback=handleLeftFlapOpened, bouncetime=200) # Endsensor Klappe links geöffnet
+ #  GPIO.add_event_detect(Config.I03, GPIO.RISING, callback=handleRightFlapClosed, bouncetime=200) # Endsensor Klappe rechts geschlossen
+ #  GPIO.add_event_detect(Config.I04, GPIO.RISING, callback=handleRightFlapOpened, bouncetime=200) # Endsensor Klappe rechts geöffnet
+ #  GPIO.add_event_detect(Config.I05, GPIO.BOTH, callback=handleDeliveryDoorStatus, bouncetime=200) # Paket Tür geöffnet o. geschlossen
+ #  GPIO.add_event_detect(Config.I06, GPIO.FALLING, callback=handleMailboxOpen, bouncetime=200) # Briefkasten Zusteller geoffnet
+ #  GPIO.add_event_detect(Config.I07, GPIO.FALLING, callback=handleMailboxDoorOpen, bouncetime=200) # Briefkasten Entnahme
+ #  GPIO.add_event_detect(Config.I08, GPIO.FALLING, callback=handlePackageBoxDoorClosed, bouncetime=200) # Paketbox Entnahme
+ #  GPIO.add_event_detect(Config.I09, GPIO.RISING, callback=handleGartenDoorButton6Press, bouncetime=200) # Tueroeffner 6
+ #  GPIO.add_event_detect(Config.I10, GPIO.RISING, callback=handleGardenDoorButton8Press, bouncetime=200) # Tueroeffner 8
+ #  GPIO.add_event_detect(Config.I11, GPIO.RISING, callback=handleMotionDetection, bouncetime=200) # Bewegungsmelder Einklemmschutz
 
 def setOutputWithRuntime(runtime, gpio, state):
     """Set GPIO output for specified runtime, then automatically reset to opposite state."""
@@ -213,14 +175,14 @@ def setOutputWithRuntime(runtime, gpio, state):
 
 def unlockDoor():
    try:
-      GPIO.output(Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
+      GPIO.output(Config.Q8, GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
       logger.info("Türe Paketzusteller wurde entriegelt.")
    except Exception as e:
       logger.error(f"Hardwarefehler in unlockDoor: {e}")
 
 def lockDoor():
    try:
-      GPIO.output(Q8, GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
+      GPIO.output(Config.Q8, GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
       logger.info("Türe Paketzusteller wurde verriegelt.")
    except Exception as e:
       logger.error(f"Hardwarefehler in lockDoor: {e}")
@@ -233,8 +195,8 @@ def Klappen_schliessen():
     
     logger.info("Klappen fahren zu")
     # Start closing motors
-    timer1 = setOutputWithRuntime(closure_timer_seconds, Q1, GPIO.LOW)
-    timer2 = setOutputWithRuntime(closure_timer_seconds, Q3, GPIO.LOW)
+    timer1 = setOutputWithRuntime(closure_timer_seconds, Config.Q1, GPIO.LOW)
+    timer2 = setOutputWithRuntime(closure_timer_seconds, Config.Q3, GPIO.LOW)
     
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
@@ -280,8 +242,8 @@ def Klappen_oeffnen():
 
     logger.info("Klappen fahren auf")
     # Start opening motors
-    timer1 = setOutputWithRuntime(motor_reverse_signal, Q2, GPIO.LOW)
-    timer2 = setOutputWithRuntime(motor_reverse_signal, Q4, GPIO.LOW)
+    timer1 = setOutputWithRuntime(motor_reverse_signal, Config.Q2, GPIO.LOW)
+    timer2 = setOutputWithRuntime(motor_reverse_signal, Config.Q4, GPIO.LOW)
     
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
@@ -330,15 +292,47 @@ def main():
     try:
         init()
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
-        ResetDoors()
+        #ResetDoors()
         
         # Main monitoring loop
+   # Pinbelegung Eingänge
+  #  I01 = 27 #11 Klappe links zu
+  #  I02 = 17 #13 Klappe links auf
+  #  I03 = 9 #15 Klappe rechts zu
+  #  I04 = 22  #21 Klappe rechts auf
+  #  I05 = 23 #16 Tür Riegelkontakt + Tür Magentkontakt
+  #  I06 = 24 #18 Briefkasten Magnetkontak
+  #  I07 = 25 #22 Briefkasten Türe zum leeren
+  #  I08 = 12 #32 Paketbox Tür zum leeren
+  #  I09 = 8  #24 Türöffner 6 Taster
+  #  I10 = 7  #26 Türffner 8 Taster
+  #  I11 = 11 #23 Bewegungsmelder
+        inputs = [Config.I01, Config.I02, Config.I03, Config.I04, Config.I05, Config.I06, Config.I07, Config.I08, Config.I09, Config.I10, Config.I11]
+        inputsClearName = ["Endschalter Klappe links zu", "Endschalter Klappe links auf", " Endschalter Klappe rechts zu", "Endschalter Klappe rechts auf", "Klappe Zusteller Magentkontakt", 
+                           "Briefkasten Zusteller Magnetkontak", "Briefkasten Türe zum leeren Magenetkontakt", "Paketbox Tür zum leeren Magenetkontakt", "Türöffner 6 Taster", "Türöffner 8 Taster", "Bewegungsmelder"]
+        statusOld = [0] * len(inputs)
+        statusNew = [0] * len(inputs)
+
+        # Beispiel: Fülle das Array mit aktuellen GPIO-Werten
+        for i, pin in enumerate(inputs):
+           statusOld[i] = GPIO.input(pin)
+        
+
         while True:
-            time.sleep(1)  # Main loop - check system state
-            # Monitor for error conditions
-            if pbox_state.is_any_error():
-                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
-                time.sleep(Config.ERROR_REPORT_INTERVAL)  # Slow down error reporting
+           time.sleep(1)  # Main loop - check system state
+           for i, pin in enumerate(inputs):
+               statusNew[i] = GPIO.input(pin)
+               if statusNew[i] != statusOld[i]:
+                   logger.info(f"GPIO {pin} ({inputsClearName[i]}) changed: {statusOld[i]} -> {statusNew[i]}")
+                   statusOld[i] = statusNew[i]
+
+
+
+#            time.sleep(1)  # Main loop - check system state
+#            # Monitor for error conditions
+#            if pbox_state.is_any_error():
+#                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
+#                time.sleep(Config.ERROR_REPORT_INTERVAL)  # Slow down error reporting
                 
     except KeyboardInterrupt:
         logger.info("Beendet mit Strg+C")
