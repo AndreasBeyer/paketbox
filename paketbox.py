@@ -123,8 +123,8 @@ def main():
         for i, pin in enumerate(Config.inputs):
            statusOld[i] = GPIO.input(pin)
 
-        pbox_state.set_left_door(DoorState.OPEN if statusOld[1] == GPIO.HIGH else DoorState.CLOSED)
-        pbox_state.set_right_door(DoorState.OPEN if statusOld[3] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
         pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
         logger.info(f"Zustand: {pbox_state}")
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")

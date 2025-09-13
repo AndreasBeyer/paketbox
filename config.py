@@ -9,28 +9,28 @@ class Config:
     # GPIO pin assignments
     # Using BCM numbering
     inputs = [
-            27,  # I01 Klappe links zu
-            17,  # I02 Klappe links auf
-            9,   # I03 Klappe rechts zu
-            22,  # I04 Klappe rechts auf
-            23,  # I05 Tür Riegelkontakt + Tür Magentkontakt
-            24,  # I06 Briefkasten Magnetkontak
-            25,  # I07 Briefkasten Türe zum leeren
-            12,  # I08 Paketbox Tür zum leeren
-            8,   # I09 Türöffner 6 Taster
-            7,   # I10 Türffner 8 Taster
-            11   # I11 Bewegungsmelder
+            27,  # 0 Klappe links zu
+            17,  # 1 Klappe links auf
+            9,   # 2 Klappe rechts zu
+            22,  # 3 Klappe rechts auf
+            23,  # 4 Tür Riegelkontakt + Tür Magentkontakt
+            24,  # 5 Briefkasten Magnetkontak
+            25,  # 6 Briefkasten Türe zum leeren
+            12,  # 7 Paketbox Tür zum leeren
+            8,   # 8 Türöffner 6 Taster
+            7,   # 9 Türffner 8 Taster
+            11   # 10 Bewegungsmelder
         ]
     
     OUTPUTS = [
-            5,   # Q1 Klappe links zu
-            6,   # Q2 Klappe links auf
-            13,  # Q3 Klappe rechts zu
-            16,  # Q4 Klappe rechts auf
-            14,  # Q5 
-            20,  # Q6 Bremse für Tuer
-            15,  # Q7 
-            26   # Q8 Riegel Tür
+            5,   # 0 Klappe links zu
+            6,   # 1 Klappe links auf
+            13,  # 2 Klappe rechts zu
+            16,  # 3 Klappe rechts auf
+            14,  # 4 
+            20,  # 5 Bremse für Tuer
+            15,  # 6 
+            26   # 7 Riegel Tür
         ]
 
 
