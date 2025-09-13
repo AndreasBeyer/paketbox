@@ -18,17 +18,17 @@ class Config:
     Q8 = 26 #37 Riegel Tür
 
     # Pinbelegung Eingänge
-    I01 = 27 #11 Klappe links zu
-    I02 = 17 #13 Klappe links auf
-    I03 = 9 #15 Klappe rechts zu
-    I04 = 22  #21 Klappe rechts auf
-    I05 = 23 #16 Tür Riegelkontakt + Tür Magentkontakt
-    I06 = 24 #18 Briefkasten Magnetkontak
-    I07 = 25 #22 Briefkasten Türe zum leeren
-    I08 = 12 #32 Paketbox Tür zum leeren
-    I09 = 8  #24 Türöffner 6 Taster
-    I10 = 7  #26 Türffner 8 Taster
-    I11 = 11 #23 Bewegungsmelder
+   # I01 = 27 #11 Klappe links zu
+   # I02 = 17 #13 Klappe links auf
+   # I03 = 9 #15 Klappe rechts zu
+   # I04 = 22  #21 Klappe rechts auf
+   # I05 = 23 #16 Tür Riegelkontakt + Tür Magentkontakt
+   # I06 = 24 #18 Briefkasten Magnetkontak
+   # I07 = 25 #22 Briefkasten Türe zum leeren
+   # I08 = 12 #32 Paketbox Tür zum leeren
+   # I09 = 8  #24 Türöffner 6 Taster
+   # I10 = 7  #26 Türffner 8 Taster
+   # I11 = 11 #23 Bewegungsmelder
 
     # 1-wire Temperatursensor
     # 1-wire    4  7
@@ -38,3 +38,17 @@ class Config:
     # BITCLR   18 12
     # DATA OUT 21 40
     # DATA IN  20 38
+
+    inputs = [
+            27,  # I01 Klappe links zu
+            17,  # I02 Klappe links auf
+            9,   # I03 Klappe rechts zu
+            22,  # I04 Klappe rechts auf
+            23,  # I05 Tür Riegelkontakt + Tür Magentkontakt
+            24,  # I06 Briefkasten Magnetkontak
+            25,  # I07 Briefkasten Türe zum leeren
+            12,  # I08 Paketbox Tür zum leeren
+            8,   # I09 Türöffner 6 Taster
+            7,   # I10 Türffner 8 Taster
+            11   # I11 Bewegungsmelder
+        ]

@@ -5,9 +5,11 @@ import threading
 import sys
 import logging
 from datetime import datetime
+import handler
 from interruptHandler import *
 from config import *
 import config
+from handler import *
 
 # Configure logging
 logging.basicConfig(
@@ -127,20 +129,12 @@ def init():
    GPIO.output(Config.Q8, GPIO.HIGH)
 
    # Setze als Eingang
-   GPIO.setup(Config.I01, GPIO.IN)
-   GPIO.setup(Config.I02, GPIO.IN)
-   GPIO.setup(Config.I03, GPIO.IN)
-   GPIO.setup(Config.I04, GPIO.IN)
-   GPIO.setup(Config.I05, GPIO.IN)
-   GPIO.setup(Config.I06, GPIO.IN)
-   GPIO.setup(Config.I07, GPIO.IN)
-   GPIO.setup(Config.I08, GPIO.IN)
-   GPIO.setup(Config.I09, GPIO.IN)
-   GPIO.setup(Config.I10, GPIO.IN)
-   GPIO.setup(Config.I11, GPIO.IN)
-   pbox_state.set_left_door(DoorState.OPEN if GPIO.input(Config.I02) == GPIO.HIGH else DoorState.CLOSED)
-   pbox_state.set_right_door(DoorState.OPEN if GPIO.input(Config.I04) == GPIO.HIGH else DoorState.CLOSED)
-   pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(Config.I05) == GPIO.HIGH else DoorState.CLOSED)
+   for pin in Config.inputs:
+       GPIO.setup(pin, GPIO.IN)
+
+   pbox_state.set_left_door(DoorState.OPEN if GPIO.input(Config.inputs[1]) == GPIO.HIGH else DoorState.CLOSED)
+   pbox_state.set_right_door(DoorState.OPEN if GPIO.input(Config.inputs[3]) == GPIO.HIGH else DoorState.CLOSED)
+   pbox_state.set_paket_tuer(DoorState.OPEN if GPIO.input(Config.inputs[4]) == GPIO.HIGH else DoorState.CLOSED)
 
    #Interrupt
  #  GPIO.add_event_detect(Config.I01, GPIO.RISING, callback=handleLeftFlapClosed, bouncetime=200) # EndsensorKlappe links geschlossen
@@ -294,41 +288,23 @@ def main():
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
         #ResetDoors()
         
-        # Main monitoring loop
-   # Pinbelegung Eingänge
-  #  I01 = 27 #11 Klappe links zu
-  #  I02 = 17 #13 Klappe links auf
-  #  I03 = 9 #15 Klappe rechts zu
-  #  I04 = 22  #21 Klappe rechts auf
-  #  I05 = 23 #16 Tür Riegelkontakt + Tür Magentkontakt
-  #  I06 = 24 #18 Briefkasten Magnetkontak
-  #  I07 = 25 #22 Briefkasten Türe zum leeren
-  #  I08 = 12 #32 Paketbox Tür zum leeren
-  #  I09 = 8  #24 Türöffner 6 Taster
-  #  I10 = 7  #26 Türffner 8 Taster
-  #  I11 = 11 #23 Bewegungsmelder
-        inputs = [Config.I01, Config.I02, Config.I03, Config.I04, Config.I05, Config.I06, Config.I07, Config.I08, Config.I09, Config.I10, Config.I11]
-        inputsClearName = ["Endschalter Klappe links zu", "Endschalter Klappe links auf", " Endschalter Klappe rechts zu", "Endschalter Klappe rechts auf", "Klappe Zusteller Magentkontakt", 
-                           "Briefkasten Zusteller Magnetkontak", "Briefkasten Türe zum leeren Magenetkontakt", "Paketbox Tür zum leeren Magenetkontakt", "Türöffner 6 Taster", "Türöffner 8 Taster", "Bewegungsmelder"]
-        statusOld = [0] * len(inputs)
-        statusNew = [0] * len(inputs)
+
+        statusOld = [0] * len(Config.inputs)
+        statusNew = [0] * len(Config.inputs)
 
         # Beispiel: Fülle das Array mit aktuellen GPIO-Werten
-        for i, pin in enumerate(inputs):
+        for i, pin in enumerate(Config.inputs):
            statusOld[i] = GPIO.input(pin)
         
-
         while True:
            time.sleep(1)  # Main loop - check system state
-           for i, pin in enumerate(inputs):
+           for i, pin in enumerate(Config.inputs):
                statusNew[i] = GPIO.input(pin)
                if statusNew[i] != statusOld[i]:
-                   logger.info(f"GPIO {pin} ({inputsClearName[i]}) changed: {statusOld[i]} -> {statusNew[i]}")
                    statusOld[i] = statusNew[i]
+                   handler.pinChanged(i, statusOld[i], statusNew[i])
+                   logger.info(f"GPIO {pin} changed: {statusOld[i]} -> {statusNew[i]}")
 
-
-
-#            time.sleep(1)  # Main loop - check system state
 #            # Monitor for error conditions
 #            if pbox_state.is_any_error():
 #                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
