@@ -11,6 +11,7 @@ from paketbox import (
     unlockDoor, lockDoor, closure_timer_seconds
 )
 from state import pbox_state  # Import from central state module
+from handler import pinChanged  # Import pinChanged function to test
 
 class TestPaketBox(unittest.TestCase):
     def setUp(self):
@@ -248,6 +249,95 @@ class TestPaketBox(unittest.TestCase):
         self.assertIn("Klappe links: OPEN", state_str)
         self.assertIn("Klappe rechts: CLOSED", state_str)
         self.assertIn("Pakettür: ERROR", state_str)
+
+    def test_pinChanged_falling_edge_flap_positions(self):
+        """Test pinChanged for flap position sensors on falling edge"""
+        # Test left flap closed (pin 0, falling edge)
+        pinChanged(0, 1, 0)
+        self.assertEqual(pbox_state.left_door, DoorState.CLOSED)
+        
+        # Reset state
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        
+        # Test left flap opened (pin 1, falling edge) - CORRECTED
+        pinChanged(1, 1, 0)
+        self.assertEqual(pbox_state.left_door, DoorState.OPEN)
+        
+        # Reset state
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        
+        # Test right flap closed (pin 2, falling edge) - CORRECTED
+        pinChanged(2, 1, 0)
+        self.assertEqual(pbox_state.right_door, DoorState.CLOSED)
+        
+        # Reset state
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        
+        # Test right flap opened (pin 3, falling edge)
+        pinChanged(3, 1, 0)
+        self.assertEqual(pbox_state.right_door, DoorState.OPEN)
+
+    def test_pinChanged_rising_edge_doors(self):
+        """Test pinChanged for door sensors on rising edge"""
+        # Test package door opened (pin 4, rising edge)
+        pinChanged(4, 0, 1)
+        self.assertEqual(pbox_state.paket_tuer, DoorState.OPEN)
+        
+        # Reset state
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        
+        # Test package door closed (pin 4, falling edge)
+        pinChanged(4, 1, 0)
+        self.assertEqual(pbox_state.paket_tuer, DoorState.CLOSED)
+
+    def test_pinChanged_no_change_same_state(self):
+        """Test pinChanged with no state change (oldState == newState)"""
+        original_left = pbox_state.left_door
+        original_right = pbox_state.right_door
+        original_paket = pbox_state.paket_tuer
+        
+        # Call with same old and new state - should not change anything
+        pinChanged(0, 1, 1)
+        
+        # Verify no state changes occurred
+        self.assertEqual(pbox_state.left_door, original_left)
+        self.assertEqual(pbox_state.right_door, original_right)
+        self.assertEqual(pbox_state.paket_tuer, original_paket)
+
+    def test_pinChanged_all_input_pins(self):
+        """Test pinChanged covers all defined input pins properly"""
+        # Test all pins for rising edge (pins 5-10 only log, don't change state)
+        test_cases_rising = [
+            (5, "Briefkasten Zusteller"),
+            (6, "Briefkasten Türe zum Leeren"),
+            (7, "Paketbox Türe zum Leeren"),
+        ]
+        
+        for pin, description in test_cases_rising:
+            with self.subTest(pin=pin, description=description):
+                # Should not crash and not change door states
+                original_state = (pbox_state.left_door, pbox_state.right_door, pbox_state.paket_tuer)
+                pinChanged(pin, 0, 1)
+                current_state = (pbox_state.left_door, pbox_state.right_door, pbox_state.paket_tuer)
+                self.assertEqual(original_state, current_state)
+        
+        # Test all pins for falling edge (pins 5-10 only log, don't change flap states)
+        test_cases_falling = [
+            (8, "Türöffner Taster 6"),
+            (9, "Türöffner Taster 8"),
+            (10, "Bewegungsmelder"),
+        ]
+        
+        for pin, description in test_cases_falling:
+            with self.subTest(pin=pin, description=description):
+                # Should not crash and not change door states
+                original_state = (pbox_state.left_door, pbox_state.right_door, pbox_state.paket_tuer)
+                pinChanged(pin, 1, 0)
+                current_state = (pbox_state.left_door, pbox_state.right_door, pbox_state.paket_tuer)
+                self.assertEqual(original_state, current_state)
 
 class TestPaketBoxIntegration(unittest.TestCase):
     """Integration tests for complete system scenarios"""
