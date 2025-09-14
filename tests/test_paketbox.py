@@ -268,40 +268,34 @@ class TestPaketBox(unittest.TestCase):
         self.assertEqual(pbox_state.paket_tuer, DoorState.CLOSED)
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_handleMailboxOpen(self, mock_sleep, mock_gpio):
+    def test_handleMailboxOpen(self, mock_gpio):
         """Test mailbox opening handler"""
         mock_gpio.HIGH = 1
         mock_gpio.LOW = 0
-        mock_gpio.input.return_value = mock_gpio.LOW
         
         # Should not throw exception and print message
         handleMailboxOpen(24)
-        mock_gpio.input.assert_called_with(24)
+        # New handlers don't read GPIO, just log - no assertion needed
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_handlePackageBoxDoorOpen(self, mock_sleep, mock_gpio):
+    def test_handlePackageBoxDoorOpen(self, mock_gpio):
         """Test package box door opening handler"""
         mock_gpio.HIGH = 1
         mock_gpio.LOW = 0
-        mock_gpio.input.return_value = mock_gpio.LOW
         
         # Should not throw exception and print message
         handlePackageBoxDoorOpen(12)
-        mock_gpio.input.assert_called_with(12)
+        # New handlers don't read GPIO, just log - no assertion needed
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_handleMailboxDoorOpen(self, mock_sleep, mock_gpio):
+    def test_handleMailboxDoorOpen(self, mock_gpio):
         """Test mailbox door opening handler"""
         mock_gpio.HIGH = 1
         mock_gpio.LOW = 0
-        mock_gpio.input.return_value = mock_gpio.LOW
         
         # Should not throw exception and print message
         handleMailboxDoorOpen(25)
-        mock_gpio.input.assert_called_with(25)
+        # New handlers don't read GPIO, just log - no assertion needed
 
     def test_PaketBoxState_is_open(self):
         """Test state detection for all flaps open"""
@@ -340,8 +334,8 @@ class TestPaketBox(unittest.TestCase):
         pbox_state.set_paket_tuer(DoorState.ERROR)
         
         state_str = str(pbox_state)
-        self.assertIn("Links: OPEN", state_str)
-        self.assertIn("Rechts: CLOSED", state_str)
+        self.assertIn("Klappe links: OPEN", state_str)
+        self.assertIn("Klappe rechts: CLOSED", state_str)
         self.assertIn("Pakettür: ERROR", state_str)
 
     def test_GPIO_debouncing_behavior(self):
@@ -475,8 +469,7 @@ class TestPaketBoxIntegration(unittest.TestCase):
                         self.assertEqual(pbox_state.is_any_error(), expected_any_error)
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_gpio_event_simulation(self, mock_sleep, mock_gpio):
+    def test_gpio_event_simulation(self, mock_gpio):
         """Test GPIO event handlers with various input scenarios"""
         # Setup GPIO mock
         mock_gpio.HIGH = 1
@@ -490,29 +483,23 @@ class TestPaketBoxIntegration(unittest.TestCase):
             (handleRightFlapOpened, 22, DoorState.OPEN),
         ]
         
+        # Test left flap handlers
         for handler, pin, expected_left_state in test_cases[:2]:
             with self.subTest(handler=handler.__name__, pin=pin):
                 # Reset state
                 pbox_state.set_left_door(DoorState.CLOSED)
                 
-                # Test with LOW signal (should trigger state change)
-                mock_gpio.input.return_value = mock_gpio.LOW
+                # Test handler (new handlers set state directly without GPIO reading)
                 handler(pin)
                 self.assertEqual(pbox_state.left_door, expected_left_state)
-                
-                # Test with HIGH signal (should be ignored due to debouncing)
-                pbox_state.set_left_door(DoorState.CLOSED)  # Reset
-                mock_gpio.input.return_value = mock_gpio.HIGH
-                handler(pin)
-                self.assertEqual(pbox_state.left_door, DoorState.CLOSED)  # Should not change
         
+        # Test right flap handlers  
         for handler, pin, expected_right_state in test_cases[2:]:
             with self.subTest(handler=handler.__name__, pin=pin):
                 # Reset state
                 pbox_state.set_right_door(DoorState.CLOSED)
                 
-                # Test with LOW signal
-                mock_gpio.input.return_value = mock_gpio.LOW
+                # Test handler (new handlers set state directly without GPIO reading)
                 handler(pin)
                 self.assertEqual(pbox_state.right_door, expected_right_state)
 
