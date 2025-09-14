@@ -31,6 +31,13 @@ class PaketBoxState:
             self.left_door == DoorState.OPEN,
             self.right_door == DoorState.OPEN
          ])
+       
+   def is_any_open(self):
+       with self._lock:
+         return any([
+            self.left_door == DoorState.OPEN,
+            self.right_door == DoorState.OPEN
+         ])
 
    def is_all_closed(self):
       with self._lock:

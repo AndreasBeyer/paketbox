@@ -188,7 +188,7 @@ def Klappen_oeffnen():
 def ResetDoors():
     """Reset doors to safe closed state."""
     logger.info(f"Current door state: {pbox_state}")
-    if pbox_state.is_open():
+    if pbox_state.is_any_open():
        logger.info("Resetting doors to closed state...")
        lockDoor()
        return Klappen_schliessen()
