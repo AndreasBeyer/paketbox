@@ -11,7 +11,10 @@ from paketbox import (
     unlockDoor, lockDoor, closure_timer_seconds
 )
 from state import pbox_state  # Import from central state module
-from handler import pinChanged  # Import pinChanged function to test
+from handler import (
+    pinChanged, Klappen_oeffnen_abbrechen, 
+    Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet
+)  # Import handler functions to test
 
 class TestPaketBox(unittest.TestCase):
     def setUp(self):
@@ -367,6 +370,126 @@ class TestPaketBox(unittest.TestCase):
                 self.assertEqual(actual_state, expected_state, 
                                f"Pin {pin} should set {door_attr} to {expected_state.name}")
 
+    @patch('handler.threading.Timer')
+    @patch('handler.lockDoor')
+    @patch('handler.Klappen_oeffnen')
+    def test_Klappen_oeffnen_abbrechen_with_active_timer(self, mock_oeffnen, mock_lock, mock_timer):
+        """Test canceling flap opening when timer is active"""
+        # Setup mock timer
+        mock_timer_instance = MagicMock()
+        mock_timer.return_value = mock_timer_instance
+        
+        # Start the delayed opening process
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Verify timer was created and started
+        mock_timer.assert_called_once_with(10.0, unittest.mock.ANY)
+        mock_timer_instance.start.assert_called_once()
+        
+        # Now cancel the opening
+        result = Klappen_oeffnen_abbrechen()
+        
+        # Verify cancellation
+        self.assertTrue(result)
+        mock_timer_instance.cancel.assert_called_once()
+
+    def test_Klappen_oeffnen_abbrechen_without_active_timer(self):
+        """Test canceling flap opening when no timer is active"""
+        # Call cancel without having started any timer
+        result = Klappen_oeffnen_abbrechen()
+        
+        # Should return False since no timer was active
+        self.assertFalse(result)
+
+    @patch('handler.threading.Timer')
+    @patch('handler.lockDoor')
+    @patch('handler.Klappen_oeffnen')
+    def test_Paket_Tuer_Zusteller_geschlossen_cancels_previous_timer(self, mock_oeffnen, mock_lock, mock_timer):
+        """Test that starting new closing process cancels previous timer"""
+        # Setup mock timers
+        mock_timer1 = MagicMock()
+        mock_timer2 = MagicMock()
+        mock_timer.side_effect = [mock_timer1, mock_timer2]
+        
+        # Start first closing process
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Start second closing process (should cancel first)
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Verify first timer was cancelled
+        mock_timer1.cancel.assert_called_once()
+        # Verify second timer was created and started
+        mock_timer2.start.assert_called_once()
+
+    @patch('handler.Klappen_oeffnen_abbrechen')
+    @patch('handler.Klappen_schliessen')
+    def test_Paket_Tuer_Zusteller_geoeffnet_calls_abbrechen(self, mock_schliessen, mock_abbrechen):
+        """Test that opening door cancels flap opening"""
+        # Setup: doors closed
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        
+        # Call door opened function
+        Paket_Tuer_Zusteller_geoeffnet()
+        
+        # Verify that abort function was called
+        mock_abbrechen.assert_called_once()
+
+    @patch('handler.threading.Timer')
+    @patch('handler.lockDoor')
+    @patch('handler.Klappen_oeffnen')
+    def test_delayed_klappen_oeffnen_executes_when_door_stays_closed(self, mock_oeffnen, mock_lock, mock_timer):
+        """Test that delayed flap opening executes when door stays closed"""
+        # Setup: door closed
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        
+        # Capture the timer callback
+        timer_callback = None
+        def capture_timer(delay, callback):
+            nonlocal timer_callback
+            timer_callback = callback
+            return MagicMock()
+        mock_timer.side_effect = capture_timer
+        
+        # Start the process
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Execute the delayed callback
+        timer_callback()
+        
+        # Verify flap opening was called
+        mock_oeffnen.assert_called_once()
+
+    @patch('handler.threading.Timer')
+    @patch('handler.lockDoor')
+    @patch('handler.Klappen_oeffnen')
+    def test_delayed_klappen_oeffnen_aborts_when_door_reopened(self, mock_oeffnen, mock_lock, mock_timer):
+        """Test that delayed flap opening aborts when door is reopened"""
+        # Setup: door initially closed
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        
+        # Capture the timer callback
+        timer_callback = None
+        def capture_timer(delay, callback):
+            nonlocal timer_callback
+            timer_callback = callback
+            return MagicMock()
+        mock_timer.side_effect = capture_timer
+        
+        # Start the process
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Simulate door being reopened before timer expires
+        pbox_state.set_paket_tuer(DoorState.OPEN)
+        
+        # Execute the delayed callback
+        timer_callback()
+        
+        # Verify flap opening was NOT called
+        mock_oeffnen.assert_not_called()
+
 class TestPaketBoxIntegration(unittest.TestCase):
     """Integration tests for complete system scenarios"""
     
@@ -484,6 +607,61 @@ class TestPaketBoxIntegration(unittest.TestCase):
         valid_states = {DoorState.OPEN, DoorState.CLOSED, DoorState.ERROR}
         for result in results:
             self.assertIn(result, valid_states)
+
+    @patch('handler.threading.Timer')
+    @patch('handler.lockDoor')
+    @patch('handler.Klappen_oeffnen')
+    def test_complete_door_opening_cancellation_scenario(self, mock_oeffnen, mock_lock, mock_timer):
+        """Integration test: Complete scenario of door opening cancellation"""
+        # Setup: All doors closed, package door events
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        
+        # Mock timer to capture callbacks
+        timer_callbacks = []
+        timer_instances = []
+        def create_timer(delay, callback):
+            timer_instance = MagicMock()
+            timer_instances.append(timer_instance)
+            timer_callbacks.append((delay, callback))
+            return timer_instance
+        mock_timer.side_effect = create_timer
+        
+        # Step 1: Package door closed (starts 10-second timer)
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Verify timer was started
+        self.assertEqual(len(timer_callbacks), 1)
+        delay, callback = timer_callbacks[0]
+        self.assertEqual(delay, 10.0)
+        
+        # Step 2: Package door opened again within 10 seconds (should cancel timer)
+        Paket_Tuer_Zusteller_geoeffnet()
+        
+        # Verify timer was cancelled
+        timer_instances[0].cancel.assert_called_once()
+        
+        # Step 3: Execute the callback anyway (simulating timer that already fired)
+        # But door is now open, so should abort
+        pbox_state.set_paket_tuer(DoorState.OPEN)
+        callback()
+        
+        # Verify flap opening was NOT called because door is open
+        mock_oeffnen.assert_not_called()
+        
+        # Step 4: Close door again and let timer complete
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        Paket_Tuer_Zusteller_geschlossen()
+        
+        # Get new callback
+        delay, new_callback = timer_callbacks[1]
+        
+        # Execute callback with door still closed
+        new_callback()
+        
+        # Verify flap opening was called this time
+        mock_oeffnen.assert_called_once()
 
 if __name__ == '__main__':
     unittest.main()

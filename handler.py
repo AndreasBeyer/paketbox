@@ -14,6 +14,9 @@ def get_gpio():
 
 logger = logging.getLogger(__name__) 
 
+# Global timer for managing flap opening delay
+_klappen_oeffnen_timer = None 
+
 
 
 def pinChanged(pin, oldState, newState):
@@ -132,14 +135,48 @@ def Klappen_schliessen():
     return True
 
 def Paket_Tuer_Zusteller_geschlossen():
+    global _klappen_oeffnen_timer
     logger.info("Türe Paketzusteller wurde geschlossen.")
-    time.sleep(10)
+    
+    # Cancel any existing timer
+    if _klappen_oeffnen_timer:
+        _klappen_oeffnen_timer.cancel()
+        logger.info("Vorherigen Klappen-Öffnungs-Timer abgebrochen.")
+    
     lockDoor()
-    logger.info("Starte Öffnen der Klappen...")
-    Klappen_oeffnen()
+    logger.info("Starte verzögertes Öffnen der Klappen in 10 Sekunden...")
+    
+    def delayed_klappen_oeffnen():
+        global _klappen_oeffnen_timer
+        # Check if door is still closed before opening flaps
+        if pbox_state.paket_tuer == DoorState.CLOSED:
+            logger.info("10 Sekunden vergangen, starte Öffnen der Klappen...")
+            Klappen_oeffnen()
+        else:
+            logger.warning("Klappen-Öffnung abgebrochen: Paketzusteller-Tür ist wieder geöffnet!")
+        _klappen_oeffnen_timer = None
+    
+    _klappen_oeffnen_timer = threading.Timer(10.0, delayed_klappen_oeffnen)
+    _klappen_oeffnen_timer.start()
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
+
+def Klappen_oeffnen_abbrechen():    
+    global _klappen_oeffnen_timer
+    if _klappen_oeffnen_timer:
+        _klappen_oeffnen_timer.cancel()
+        _klappen_oeffnen_timer = None
+        logger.info("Klappen-Öffnung wurde abgebrochen.")
+        return True
+    else:
+        logger.info("Kein aktiver Klappen-Öffnungs-Timer zum Abbrechen.")
+        return False
+
+
 def Paket_Tuer_Zusteller_geoeffnet():
+    # Cancel flap opening if door is opened during waiting period
+    Klappen_oeffnen_abbrechen()
+    
     if pbox_state.is_open():
          logger.warning(f"Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
          Klappen_schliessen()
