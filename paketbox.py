@@ -68,6 +68,25 @@ closure_timer_seconds = Config.CLOSURE_TIMER_SECONDS
 # endregion
 
 
+def initialize_door_states():
+    """Initialize door states based on current GPIO input readings."""
+    logger.info("Initialisiere Türzustände basierend auf GPIO-Eingängen...")
+    
+    statusOld = [0] * len(Config.INPUTS)
+    
+    # Read current GPIO states
+    for i, pin in enumerate(Config.INPUTS):
+        statusOld[i] = GPIO.input(pin)
+    
+    # Set door states based on GPIO readings
+    pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
+    pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
+    pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
+    
+    logger.info(f"Türzustände initialisiert: {pbox_state}")
+    return statusOld
+
+
 def main():
     """Main application entry point - now synchronous for GPIO compatibility."""
 
@@ -83,17 +102,10 @@ def main():
           GPIO.setup(output, GPIO.OUT)
           GPIO.output(output, GPIO.HIGH)
 
-        statusOld = [0] * len(Config.INPUTS)
+        # Initialize door states based on current GPIO readings
+        statusOld = initialize_door_states()
         statusNew = [0] * len(Config.INPUTS)
 
-        for i, pin in enumerate(Config.INPUTS):
-           statusOld[i] = GPIO.input(pin)
-
-        pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
-        pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
-        pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
-
-        logger.info(f"Zustand: {pbox_state}")
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
         handler.ResetDoors()
 

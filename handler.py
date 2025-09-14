@@ -12,12 +12,33 @@ def get_gpio():
     from paketbox import GPIO
     return GPIO
 
+def get_initialize_door_states():
+    """Lazy import to avoid circular imports"""
+    from paketbox import initialize_door_states
+    return initialize_door_states
+
 logger = logging.getLogger(__name__) 
 
 # Global timer for managing flap opening delay
 _klappen_oeffnen_timer = None 
 
-
+def ResetErrorState():
+    """Reset all doors from ERROR state to CLOSED state."""
+    logger.info("Starte Reset des Fehlerzustands...")
+    
+    # Check if any door is in error state
+    if pbox_state.is_any_error():
+        logger.warning("Fehlerzustand erkannt - setze alle Türen auf CLOSED zurück")
+                
+        # Re-initialize door states based on actual GPIO readings
+        initialize_door_states = get_initialize_door_states()
+        initialize_door_states()
+        
+        logger.info(f"Fehlerzustand behoben. Aktueller Zustand: {pbox_state}")
+    else:
+        logger.info("Kein Fehlerzustand erkannt - keine Aktion erforderlich")
+        
+    return not pbox_state.is_any_error()
 
 def pinChanged(pin, oldState, newState):
     if oldState == 0 and newState == 1: # rising edge  
@@ -55,6 +76,8 @@ def pinChanged(pin, oldState, newState):
             logger.info(f"Briefkasten Türe zum Leeren geschlossen.")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geschlossen.")
+            ResetErrorState()
+            ResetDoors()
         elif pin == 8:
             logger.info(f"Türöffner Taster 6 gedrückt.")
         elif pin == 9:
