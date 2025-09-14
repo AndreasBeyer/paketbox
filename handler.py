@@ -21,7 +21,7 @@ def pinChanged(pin, oldState, newState):
         if pin == 4:
             pbox_state.set_paket_tuer(DoorState.OPEN)
             logger.info(f"Paketklappe Zusteller geöffnet.") 
-            # Paket_Tuer_Zusteller_geoeffnet()
+            Paket_Tuer_Zusteller_geoeffnet()
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geöffnet.")
         elif pin == 6:
@@ -45,7 +45,7 @@ def pinChanged(pin, oldState, newState):
         elif pin == 4:
             pbox_state.set_paket_tuer(DoorState.CLOSED)
             logger.info(f"Paketklappe Zusteller geschlossen.")
-            # Paket_Tuer_Zusteller_geschlossen()
+            Paket_Tuer_Zusteller_geschlossen()
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geschlossen.")
         elif pin == 6:
