@@ -1,14 +1,10 @@
 # Paketbox control script
 # Version 0.4.0
 import time
-import threading
 import sys
 import logging
-import handler
+from PaketBoxState import PaketBoxState, DoorState
 from config import *
-from handler import *
-from enum import Enum, auto
-
 
 # Configure logging
 logging.basicConfig(
@@ -21,10 +17,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-class DoorState(Enum):
-   CLOSED = auto()
-   OPEN = auto()
-   ERROR = auto()
 
 try:
    import RPi.GPIO as GPIO # type: ignore
@@ -54,60 +46,20 @@ except ImportError:
       def cleanup(self):
          print(f"[MOCK] GPIO cleanup()")
    GPIO = MockGPIO()
-class PaketBoxState:
-   def __init__(self):
-      self._lock = threading.Lock()
-      self.left_door = DoorState.CLOSED
-      self.right_door = DoorState.OPEN
-      self.paket_tuer = DoorState.CLOSED
-
-   def set_left_door(self, state: DoorState):
-      with self._lock:
-         self.left_door = state
-   def set_right_door(self, state: DoorState):
-      with self._lock:
-         self.right_door = state
-   def set_paket_tuer(self, state: DoorState):
-      with self._lock:
-         self.paket_tuer = state
-
-   def is_open(self):
-       with self._lock:
-         return all([
-            self.left_door == DoorState.OPEN,
-            self.right_door == DoorState.OPEN
-         ])
    
-   def is_all_closed(self):
-      with self._lock:
-         return all([
-            self.left_door == DoorState.CLOSED,
-            self.right_door == DoorState.CLOSED,
-            self.paket_tuer == DoorState.CLOSED
-         ])
-
-   def is_any_error(self):
-      with self._lock:
-         return any([
-            self.left_door == DoorState.ERROR,
-            self.right_door == DoorState.ERROR,
-            self.paket_tuer == DoorState.ERROR
-         ])
-
-   def __str__(self):
-      with self._lock:
-         return (f"Klappe links: {self.left_door.name}, Klappe rechts: {self.right_door.name}, "
-               f"Pakettür: {self.paket_tuer.name}")
 
 # Initialisiere globalen Zustand
-# Globaler Zustand für PaketBox
+pbox_state = PaketBoxState()
+
+# Import handler after pbox_state is defined to avoid circular imports
+import handler
+# endregion
 
 
 def main():
     """Main application entry point - now synchronous for GPIO compatibility."""
 
     try:
-        Config.pbox_state = PaketBoxState()
         # verwende GPIO Nummer statt Board Nummer
         GPIO.setmode(GPIO.BCM)
    
@@ -125,11 +77,11 @@ def main():
         for i, pin in enumerate(Config.INPUTS):
            statusOld[i] = GPIO.input(pin)
 
-        Config.pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
-        Config.pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
-        Config.pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
+        pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
 
-        logger.info(f"Zustand: {Config.pbox_state}")
+        logger.info(f"Zustand: {pbox_state}")
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
         handler.ResetDoors()
 

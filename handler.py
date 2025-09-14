@@ -1,16 +1,32 @@
 
 import threading
-from venv import logger
+import logging
+from PaketBoxState import DoorState
 from config import Config
-from paketbox import DoorState, GPIO
-import time 
+import time
+
+# Import pbox_state from paketbox module
+def get_pbox_state():
+    """Lazy import to avoid circular imports"""
+    from paketbox import pbox_state
+    return pbox_state
+
+# Import GPIO from paketbox to use the same Mock/Real GPIO instance
+def get_gpio():
+    """Lazy import to avoid circular imports"""
+    from paketbox import GPIO
+    return GPIO
+
+logger = logging.getLogger(__name__) 
 
 
 
 def pinChanged(pin, oldState, newState):
+    pbox_state = get_pbox_state()
+    
     if oldState == 0 and newState == 1: # rising edge  
         if pin == 4:
-            Config.pbox_state.set_paket_tuer(DoorState.OPEN)
+            pbox_state.set_paket_tuer(DoorState.OPEN)
             logger.info(f"Paketklappe Zusteller geöffnet.") 
             # Paket_Tuer_Zusteller_geoeffnet()
         elif pin == 5:
@@ -22,19 +38,19 @@ def pinChanged(pin, oldState, newState):
 
     elif oldState == 1 and newState == 0: # falling edge
         if pin == 0:
-            Config.pbox_state.set_left_door(DoorState.CLOSED)
+            pbox_state.set_left_door(DoorState.CLOSED)
             logger.info(f"Packet Klappe links geschlossen/oben.")
         elif pin == 1:
-            Config.pbox_state.set_right_door(DoorState.CLOSED)
+            pbox_state.set_right_door(DoorState.CLOSED)
             logger.info(f"Packet Klappe rechts geschlossen/oben.")
         elif pin == 2:
-            Config.pbox_state.set_left_door(DoorState.OPEN)
+            pbox_state.set_left_door(DoorState.OPEN)
             logger.info(f"Packet Klappe links geöffnet/unten.")
         elif pin == 3:
-            Config.pbox_state.set_right_door(DoorState.OPEN)
+            pbox_state.set_right_door(DoorState.OPEN)
             logger.info(f"Packet Klappe rechts geöffnet/unten.")
         elif pin == 4:
-            Config.pbox_state.set_paket_tuer(DoorState.CLOSED)
+            pbox_state.set_paket_tuer(DoorState.CLOSED)
             logger.info(f"Paketklappe Zusteller geschlossen.")
             # Paket_Tuer_Zusteller_geschlossen()
         elif pin == 5:
@@ -56,6 +72,7 @@ def pinChanged(pin, oldState, newState):
 def setOutputWithRuntime(runtime, gpio, state):
     """Set GPIO output for specified runtime, then automatically reset to opposite state."""
     try:
+      GPIO = get_gpio()
       GPIO.output(gpio, state)
       def reset_output():
          opposite_state = GPIO.LOW if state == GPIO.HIGH else GPIO.HIGH
@@ -73,6 +90,7 @@ def setOutputWithRuntime(runtime, gpio, state):
 
 def unlockDoor():
    try:
+      GPIO = get_gpio()
       GPIO.output(Config.OUTPUTS[7], GPIO.HIGH) # Riegel öffnet Tür. Tür kann wieder geöffnet werden
       logger.info("Türe Paketzusteller wurde entriegelt.")
    except Exception as e:
@@ -80,6 +98,7 @@ def unlockDoor():
 
 def lockDoor():
    try:
+      GPIO = get_gpio()
       GPIO.output(Config.OUTPUTS[7], GPIO.LOW) # Riegel schließt Tür. Tür kann nicht mehr geöffnet werden
       logger.info("Türe Paketzusteller wurde verriegelt.")
    except Exception as e:
@@ -87,7 +106,10 @@ def lockDoor():
 
 def Klappen_schliessen():
     """Close both flaps with proper error handling and state validation."""
-    if Config.pbox_state.is_any_error():
+    pbox_state = get_pbox_state()
+    GPIO = get_gpio()
+    
+    if pbox_state.is_any_error():
         logger.warning("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
         return False
     
@@ -102,11 +124,11 @@ def Klappen_schliessen():
     
     def endlagen_pruefung_closing():
         """Check end positions after closing timeout."""
-        if not (Config.pbox_state.left_door == DoorState.CLOSED and Config.pbox_state.right_door == DoorState.CLOSED):
+        if not (pbox_state.left_door == DoorState.CLOSED and pbox_state.right_door == DoorState.CLOSED):
             logger.error(f"Fehler: Klappen nicht geschlossen nach Schließungsversuch!")
-            logger.error(f"Status: Links={Config.pbox_state.left_door.name}, Rechts={Config.pbox_state.right_door.name}")
-            Config.pbox_state.set_left_door(DoorState.ERROR)
-            Config.pbox_state.set_right_door(DoorState.ERROR)
+            logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
+            pbox_state.set_left_door(DoorState.ERROR)
+            pbox_state.set_right_door(DoorState.ERROR)
             return False
         else:
             logger.info("Klappen erfolgreich geschlossen.")
@@ -126,7 +148,8 @@ def Paket_Tuer_Zusteller_geschlossen():
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 def Paket_Tuer_Zusteller_geoeffnet():
-    if Config.pbox_state.is_open():
+    pbox_state = get_pbox_state()
+    if pbox_state.is_open():
          logger.warning(f"Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
          Klappen_schliessen()
 
@@ -134,7 +157,10 @@ def Paket_Tuer_Zusteller_geoeffnet():
 
 def Klappen_oeffnen():
     """Open both flaps with proper error handling and state validation."""
-    if Config.pbox_state.is_any_error():
+    pbox_state = get_pbox_state()
+    GPIO = get_gpio()
+    
+    if pbox_state.is_any_error():
         logger.warning("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
         return False
 
@@ -149,17 +175,17 @@ def Klappen_oeffnen():
     
     def endlagen_pruefung():
         """Check end positions after opening timeout."""
-        if not (Config.pbox_state.left_door == DoorState.OPEN and Config.pbox_state.right_door == DoorState.OPEN):
+        if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
             logger.error(f"Fehler: Klappen nicht offen nach Öffnungsversuch!")
-            logger.error(f"Status: Links={Config.pbox_state.left_door.name}, Rechts={Config.pbox_state.right_door.name}")
-            Config.pbox_state.set_left_door(DoorState.ERROR)
-            Config.pbox_state.set_right_door(DoorState.ERROR)
+            logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
+            pbox_state.set_left_door(DoorState.ERROR)
+            pbox_state.set_right_door(DoorState.ERROR)
             return False
         else:
             logger.info("Klappen erfolgreich geöffnet.")
-            logger.info(f"Starte automatisches Schließen der Klappen... Status: {Config.pbox_state}")
+            logger.info(f"Starte automatisches Schließen der Klappen... Status: {pbox_state}")
             # Auto-close after successful opening
-            if (Config.pbox_state.left_door == DoorState.OPEN and Config.pbox_state.right_door == DoorState.OPEN):
+            if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
                Klappen_schliessen()
             else:
                logger.error(f"Fehler: Klappen nicht beide im OPEN-Zustand!")
@@ -171,12 +197,13 @@ def Klappen_oeffnen():
 
 def ResetDoors():
     """Reset doors to safe closed state."""
-    logger.info(f"Current door state: {Config.pbox_state}")
-    if Config.pbox_state.is_open():
+    pbox_state = get_pbox_state()
+    logger.info(f"Current door state: {pbox_state}")
+    if pbox_state.is_open():
        logger.info("Resetting doors to closed state...")
        lockDoor()
        return Klappen_schliessen()
-    elif Config.pbox_state.is_any_error():
+    elif pbox_state.is_any_error():
        logger.warning("Doors in error state - manual intervention required!")
        return False
     else:
