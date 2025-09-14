@@ -3,13 +3,8 @@ import threading
 import logging
 from PaketBoxState import DoorState
 from config import Config
+from state import pbox_state  # Import from central state module
 import time
-
-# Import pbox_state from paketbox module
-def get_pbox_state():
-    """Lazy import to avoid circular imports"""
-    from paketbox import pbox_state
-    return pbox_state
 
 # Import GPIO from paketbox to use the same Mock/Real GPIO instance
 def get_gpio():
@@ -22,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 def pinChanged(pin, oldState, newState):
-    pbox_state = get_pbox_state()
-    
     if oldState == 0 and newState == 1: # rising edge  
         if pin == 4:
             pbox_state.set_paket_tuer(DoorState.OPEN)
@@ -106,7 +99,6 @@ def lockDoor():
 
 def Klappen_schliessen():
     """Close both flaps with proper error handling and state validation."""
-    pbox_state = get_pbox_state()
     GPIO = get_gpio()
     
     if pbox_state.is_any_error():
@@ -148,7 +140,6 @@ def Paket_Tuer_Zusteller_geschlossen():
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 def Paket_Tuer_Zusteller_geoeffnet():
-    pbox_state = get_pbox_state()
     if pbox_state.is_open():
          logger.warning(f"Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
          Klappen_schliessen()
@@ -157,7 +148,6 @@ def Paket_Tuer_Zusteller_geoeffnet():
 
 def Klappen_oeffnen():
     """Open both flaps with proper error handling and state validation."""
-    pbox_state = get_pbox_state()
     GPIO = get_gpio()
     
     if pbox_state.is_any_error():
@@ -197,7 +187,6 @@ def Klappen_oeffnen():
 
 def ResetDoors():
     """Reset doors to safe closed state."""
-    pbox_state = get_pbox_state()
     logger.info(f"Current door state: {pbox_state}")
     if pbox_state.is_open():
        logger.info("Resetting doors to closed state...")

@@ -3,8 +3,9 @@
 import time
 import sys
 import logging
-from PaketBoxState import PaketBoxState, DoorState
+from PaketBoxState import DoorState
 from config import *
+from state import pbox_state  # Import from central state module
 
 # Configure logging
 logging.basicConfig(
@@ -48,10 +49,7 @@ except ImportError:
    GPIO = MockGPIO()
    
 
-# Initialisiere globalen Zustand
-pbox_state = PaketBoxState()
-
-# Import handler after pbox_state is defined to avoid circular imports
+# Import handler after state is defined to avoid circular imports
 import handler
 
 # Re-export functions from handler for backward compatibility

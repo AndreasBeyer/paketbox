@@ -6,7 +6,7 @@ import time
 
 # Importiere die wichtigsten Symbole aus dem Hauptscript
 from paketbox import (
-    pbox_state, DoorState,
+    DoorState,
     handleLeftFlapClosed, handleLeftFlapOpened,
     handleRightFlapClosed, handleRightFlapOpened,
     handleDeliveryDoorStatus, handleMailboxOpen,
@@ -14,6 +14,7 @@ from paketbox import (
     Klappen_oeffnen, Klappen_schliessen, 
     unlockDoor, lockDoor, closure_timer_seconds
 )
+from state import pbox_state  # Import from central state module
 
 class TestPaketBox(unittest.TestCase):
     def setUp(self):
