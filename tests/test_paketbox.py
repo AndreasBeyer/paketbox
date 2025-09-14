@@ -339,6 +339,34 @@ class TestPaketBox(unittest.TestCase):
                 current_state = (pbox_state.left_door, pbox_state.right_door, pbox_state.paket_tuer)
                 self.assertEqual(original_state, current_state)
 
+    def test_pinChanged_complete_gpio_mapping(self):
+        """Test complete GPIO pin mapping documentation"""
+        # This test documents the complete and correct GPIO pin mapping
+        test_cases = [
+            # (pin, old_state, new_state, expected_door, expected_state, description)
+            (0, 1, 0, 'left_door', DoorState.CLOSED, "Left flap closed sensor"),
+            (1, 1, 0, 'left_door', DoorState.OPEN, "Left flap opened sensor"),
+            (2, 1, 0, 'right_door', DoorState.CLOSED, "Right flap closed sensor"),
+            (3, 1, 0, 'right_door', DoorState.OPEN, "Right flap opened sensor"),
+            (4, 0, 1, 'paket_tuer', DoorState.OPEN, "Package door opened sensor"),
+            (4, 1, 0, 'paket_tuer', DoorState.CLOSED, "Package door closed sensor"),
+        ]
+        
+        for pin, old_state, new_state, door_attr, expected_state, description in test_cases:
+            with self.subTest(pin=pin, description=description):
+                # Reset all states
+                pbox_state.set_left_door(DoorState.CLOSED)
+                pbox_state.set_right_door(DoorState.CLOSED)
+                pbox_state.set_paket_tuer(DoorState.CLOSED)
+                
+                # Execute pin change
+                pinChanged(pin, old_state, new_state)
+                
+                # Verify expected state change
+                actual_state = getattr(pbox_state, door_attr)
+                self.assertEqual(actual_state, expected_state, 
+                               f"Pin {pin} should set {door_attr} to {expected_state.name}")
+
 class TestPaketBoxIntegration(unittest.TestCase):
     """Integration tests for complete system scenarios"""
     
