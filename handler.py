@@ -143,7 +143,6 @@ def Paket_Tuer_Zusteller_geschlossen():
         _klappen_oeffnen_timer.cancel()
         logger.info("Vorherigen Klappen-Öffnungs-Timer abgebrochen.")
     
-    lockDoor()
     logger.info("Starte verzögertes Öffnen der Klappen in 10 Sekunden...")
     
     def delayed_klappen_oeffnen():
@@ -151,6 +150,7 @@ def Paket_Tuer_Zusteller_geschlossen():
         # Check if door is still closed before opening flaps
         if pbox_state.paket_tuer == DoorState.CLOSED:
             logger.info("10 Sekunden vergangen, starte Öffnen der Klappen...")
+            lockDoor()
             Klappen_oeffnen()
         else:
             logger.warning("Klappen-Öffnung abgebrochen: Paketzusteller-Tür ist wieder geöffnet!")
