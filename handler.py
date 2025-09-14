@@ -34,11 +34,11 @@ def pinChanged(pin, oldState, newState):
             pbox_state.set_left_door(DoorState.CLOSED)
             logger.info(f"Packet Klappe links geschlossen/oben.")
         elif pin == 1:
-            pbox_state.set_right_door(DoorState.CLOSED)
-            logger.info(f"Packet Klappe rechts geschlossen/oben.")
-        elif pin == 2:
-            pbox_state.set_left_door(DoorState.OPEN)
+            pbox_state.set_right_door(DoorState.OPEN)
             logger.info(f"Packet Klappe links geöffnet/unten.")
+        elif pin == 2:
+            pbox_state.set_left_door(DoorState.CLOSED)
+            logger.info(f"Packet Klappe recht geschlossen/oben.")
         elif pin == 3:
             pbox_state.set_right_door(DoorState.OPEN)
             logger.info(f"Packet Klappe rechts geöffnet/unten.")
