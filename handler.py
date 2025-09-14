@@ -5,6 +5,7 @@ from config import Config
 from paketbox import DoorState, GPIO
 import time 
 from paketbox import pbox_state
+import paketbox
 
 
 def pinChanged(pin, oldState, newState):
@@ -171,12 +172,12 @@ def Klappen_oeffnen():
 
 def ResetDoors():
     """Reset doors to safe closed state."""
-    logger.info(f"Current door state: {pbox_state}")
-    if pbox_state.is_open():
+    logger.info(f"Current door state: {paketbox.pbox_state}")
+    if paketbox.pbox_state.is_open():
        logger.info("Resetting doors to closed state...")
        lockDoor()
        return Klappen_schliessen()
-    elif pbox_state.is_any_error():
+    elif paketbox.pbox_state.is_any_error():
        logger.warning("Doors in error state - manual intervention required!")
        return False
     else:
