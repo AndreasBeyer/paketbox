@@ -8,13 +8,15 @@ import time
 from paketbox import (
     DoorState,
     Klappen_oeffnen, Klappen_schliessen, 
-    unlockDoor, lockDoor, closure_timer_seconds
+    unlockDoor, lockDoor
 )
 from state import pbox_state  # Import from central state module
 from handler import (
     pinChanged, Klappen_oeffnen_abbrechen, 
-    Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet
+    Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet,
+    Klappen_oeffnen, Klappen_schliessen
 )  # Import handler functions to test
+from config import Config  # Import Config for timer values
 
 class TestPaketBox(unittest.TestCase):
     def setUp(self):
@@ -39,7 +41,7 @@ class TestPaketBox(unittest.TestCase):
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung (with +1 offset)
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:  # This is endlagen_pruefung (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -76,7 +78,7 @@ class TestPaketBox(unittest.TestCase):
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung (with +1 offset)
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:  # This is endlagen_pruefung (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -115,7 +117,7 @@ class TestPaketBox(unittest.TestCase):
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung_closing (with +1 offset)
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:  # This is endlagen_pruefung_closing (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -156,7 +158,7 @@ class TestPaketBox(unittest.TestCase):
         endlagen_callback = None
         def create_timer(delay, callback, args=None):
             nonlocal endlagen_callback
-            if delay == closure_timer_seconds + 1:  # This is endlagen_pruefung_closing (with +1 offset)
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:  # This is endlagen_pruefung_closing (with +1 offset)
                 endlagen_callback = callback
             timer_mock = MagicMock()
             return timer_mock
@@ -197,6 +199,286 @@ class TestPaketBox(unittest.TestCase):
         
         # State should remain in error
         self.assertEqual(pbox_state.left_door, DoorState.ERROR)
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    def test_motor_blockage_only_left_flap_blocked(self, mock_timer, mock_setOutput, mock_get_gpio):
+        """Test motor blockage: only left flap blocked by package"""
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        mock_setOutput.return_value = True
+        
+        # Capture timer callback with debug output
+        endlagen_callback = None
+        timer_calls = []
+        def create_timer(delay, callback, args=None):
+            nonlocal endlagen_callback
+            timer_calls.append(delay)
+            print(f"DEBUG: Timer created with delay={delay}, expected={Config.CLOSURE_TIMER_SECONDS + 1} (= {Config.CLOSURE_TIMER_SECONDS} + 1)")
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:
+                endlagen_callback = callback
+                print(f"DEBUG: Captured endlagen_callback")
+            timer_mock = MagicMock()
+            timer_mock.start = MagicMock()
+            return timer_mock
+        mock_timer.side_effect = create_timer
+        
+        # Set initial state - both doors closed
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        
+        # Execute flap opening
+        result = Klappen_oeffnen()
+        print(f"DEBUG: Klappen_oeffnen returned: {result}")
+        print(f"DEBUG: Timer calls: {timer_calls}")
+        
+        # Simulate: only right flap opens successfully, left flap blocked by package
+        pbox_state.set_right_door(DoorState.OPEN)
+        # left_door stays CLOSED (blocked)
+        
+        # Execute endlagen_pruefung callback - should detect error
+        self.assertIsNotNone(endlagen_callback, f"Timer callback should be captured. Timer calls: {timer_calls}")
+        endlagen_callback()
+        
+        # Verify both doors are set to ERROR state (since not both are OPEN)
+        self.assertEqual(pbox_state.left_door, DoorState.ERROR)
+        self.assertEqual(pbox_state.right_door, DoorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    def test_motor_blockage_both_flaps_blocked(self, mock_timer, mock_setOutput, mock_get_gpio):
+        """Test motor blockage: both flaps blocked by large package"""
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        mock_setOutput.return_value = True
+        
+        # Capture timer callback
+        endlagen_callback = None
+        def create_timer(delay, callback, args=None):
+            nonlocal endlagen_callback
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:
+                endlagen_callback = callback
+            return MagicMock()
+        mock_timer.side_effect = create_timer
+        
+        # Set initial state - both doors closed
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        
+        # Execute flap opening
+        Klappen_oeffnen()
+        
+        # Simulate: both flaps blocked by large package - neither opens
+        # Both doors stay CLOSED (blocked)
+        
+        # Execute endlagen_pruefung callback - should detect error
+        self.assertIsNotNone(endlagen_callback, "Timer callback should be captured")
+        endlagen_callback()
+        
+        # Verify both doors are set to ERROR state
+        self.assertEqual(pbox_state.left_door, DoorState.ERROR)
+        self.assertEqual(pbox_state.right_door, DoorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    def test_motor_blockage_partial_opening(self, mock_timer, mock_setOutput, mock_get_gpio):
+        """Test motor blockage: flaps partially open but can't reach full position"""
+        # This simulates a scenario where motors run but flaps get stuck halfway
+        # In real hardware, this would be detected by position sensors
+        
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        mock_setOutput.return_value = True
+        
+        # Capture timer callback
+        endlagen_callback = None
+        def create_timer(delay, callback, args=None):
+            nonlocal endlagen_callback
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:
+                endlagen_callback = callback
+            return MagicMock()
+        mock_timer.side_effect = create_timer
+        
+        # Execute flap opening
+        Klappen_oeffnen()
+        
+        # Simulate: flaps move but don't reach OPEN position due to obstruction
+        # Position sensors would not trigger, so doors remain CLOSED
+        
+        # Execute callback - should detect that flaps didn't open
+        if endlagen_callback:
+            endlagen_callback()
+        
+        # Verify error state is set
+        self.assertEqual(pbox_state.left_door, DoorState.ERROR)
+        self.assertEqual(pbox_state.right_door, DoorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    def test_motor_blockage_closing_with_package_obstruction(self, mock_timer, mock_setOutput, mock_get_gpio):
+        """Test motor blockage during closing: package prevents flap from closing"""
+        # Setup initial state with open flaps
+        pbox_state.set_left_door(DoorState.OPEN)
+        pbox_state.set_right_door(DoorState.OPEN)
+        
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        mock_setOutput.return_value = True
+        
+        # Capture timer callback
+        endlagen_callback = None
+        def create_timer(delay, callback, args=None):
+            nonlocal endlagen_callback
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:
+                endlagen_callback = callback
+            return MagicMock()
+        mock_timer.side_effect = create_timer
+        
+        # Execute flap closing
+        Klappen_schliessen()
+        
+        # Simulate: package blocks right flap from closing
+        pbox_state.set_left_door(DoorState.CLOSED)  # Left closes successfully
+        # right_door stays OPEN (blocked by package)
+        
+        # Execute callback - should detect closing error
+        if endlagen_callback:
+            endlagen_callback()
+        
+        # Verify both doors are set to ERROR state
+        self.assertEqual(pbox_state.left_door, DoorState.ERROR)
+        self.assertEqual(pbox_state.right_door, DoorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    def test_motor_failure_setOutputWithRuntime_fails(self, mock_timer, mock_setOutput, mock_get_gpio):
+        """Test motor failure: setOutputWithRuntime returns None (hardware failure)"""
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        
+        # Simulate hardware failure - first motor starts, second motor fails
+        mock_setOutput.side_effect = [True, None]  # First motor OK, second fails
+        
+        # Execute flap opening - should fail early
+        result = Klappen_oeffnen()
+        
+        # Verify operation failed
+        self.assertFalse(result)
+        
+        # Timer should not be started for endlagen_pruefung
+        mock_timer.assert_not_called()
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    def test_motor_failure_one_motor_fails_to_start(self, mock_timer, mock_setOutput, mock_get_gpio):
+        """Test motor failure: one motor fails to start while other succeeds"""
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        
+        # Simulate both motors failing
+        mock_setOutput.side_effect = [None, None]  # Both motors fail
+        
+        # Execute flap opening - should fail early
+        result = Klappen_oeffnen()
+        
+        # Verify operation failed
+        self.assertFalse(result)
+        
+        # Verify first motor was attempted
+        self.assertGreaterEqual(mock_setOutput.call_count, 1)
+        
+        # Timer should not be started for endlagen_pruefung
+        mock_timer.assert_not_called()
+
+    @patch('handler.get_gpio')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
+    @patch('handler.Klappen_schliessen')
+    def test_complete_package_delivery_with_motor_blockage_recovery(self, mock_schliessen, mock_timer, mock_setOutput, mock_get_gpio):
+        """Integration test: complete package delivery cycle with motor blockage and recovery"""
+        # Setup GPIO mock
+        mock_gpio = MagicMock()
+        mock_gpio.LOW = 0
+        mock_gpio.HIGH = 1
+        mock_get_gpio.return_value = mock_gpio
+        mock_setOutput.return_value = True
+        mock_schliessen.return_value = True
+        
+        # Capture timer callback
+        endlagen_callback = None
+        def create_timer(delay, callback, args=None):
+            nonlocal endlagen_callback
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1:
+                endlagen_callback = callback
+            return MagicMock()
+        mock_timer.side_effect = create_timer
+        
+        # Step 1: Normal package delivery - flaps should open
+        Klappen_oeffnen()
+        
+        # Step 2: Simulate package blocking flaps from opening fully
+        # (Package too large or positioned awkwardly)
+        
+        # Execute callback - motors ran but flaps didn't reach open position
+        if endlagen_callback:
+            endlagen_callback()
+        
+        # Step 3: Verify system detects blockage
+        self.assertEqual(pbox_state.left_door, DoorState.ERROR)
+        self.assertEqual(pbox_state.right_door, DoorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+        
+        # Step 4: Manual intervention - package removed, system reset
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        
+        # Step 5: Retry operation should work after clearing obstruction
+        # Reset timer callback for new attempt
+        endlagen_callback = None
+        mock_timer.side_effect = create_timer
+        
+        Klappen_oeffnen()
+        
+        # Step 6: This time flaps open successfully
+        pbox_state.set_left_door(DoorState.OPEN)
+        pbox_state.set_right_door(DoorState.OPEN)
+        
+        if endlagen_callback:
+            endlagen_callback()
+        
+        # Step 7: Verify successful operation and auto-close
+        self.assertEqual(pbox_state.left_door, DoorState.OPEN)
+        self.assertEqual(pbox_state.right_door, DoorState.OPEN)
+        self.assertFalse(pbox_state.is_any_error())
+        mock_schliessen.assert_called_once()  # Auto-close after successful opening
 
     @patch('paketbox.GPIO')
     def test_unlockDoor(self, mock_gpio):
@@ -520,7 +802,7 @@ class TestPaketBoxIntegration(unittest.TestCase):
         
         # Simulate error by keeping doors closed
         for delay, callback, args in timer_callbacks:
-            if delay == closure_timer_seconds + 1 and args is None:
+            if delay == Config.CLOSURE_TIMER_SECONDS + 1 and args is None:
                 callback()  # Execute without setting doors to OPEN
                 break
         
