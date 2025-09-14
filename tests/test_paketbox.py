@@ -7,10 +7,6 @@ import time
 # Importiere die wichtigsten Symbole aus dem Hauptscript
 from paketbox import (
     DoorState,
-    handleLeftFlapClosed, handleLeftFlapOpened,
-    handleRightFlapClosed, handleRightFlapOpened,
-    handleDeliveryDoorStatus, handleMailboxOpen,
-    handlePackageBoxDoorOpen, handleMailboxDoorOpen,
     Klappen_oeffnen, Klappen_schliessen, 
     unlockDoor, lockDoor, closure_timer_seconds
 )
@@ -22,34 +18,6 @@ class TestPaketBox(unittest.TestCase):
         pbox_state.set_left_door(DoorState.CLOSED)
         pbox_state.set_right_door(DoorState.CLOSED)
         pbox_state.set_paket_tuer(DoorState.CLOSED)
-
-    @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')  # Mock sleep to speed up tests
-    def test_handleLeftFlapClosed(self, mock_sleep, mock_gpio):
-        mock_gpio.input.return_value = mock_gpio.LOW
-        handleLeftFlapClosed(27)
-        self.assertEqual(pbox_state.left_door, DoorState.CLOSED)
-
-    @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_handleLeftFlapOpened(self, mock_sleep, mock_gpio):
-        mock_gpio.input.return_value = mock_gpio.LOW
-        handleLeftFlapOpened(17)
-        self.assertEqual(pbox_state.left_door, DoorState.OPEN)
-
-    @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_handleRightFlapClosed(self, mock_sleep, mock_gpio):
-        mock_gpio.input.return_value = mock_gpio.LOW
-        handleRightFlapClosed(9)
-        self.assertEqual(pbox_state.right_door, DoorState.CLOSED)
-
-    @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    def test_handleRightFlapOpened(self, mock_sleep, mock_gpio):
-        mock_gpio.input.return_value = mock_gpio.LOW
-        handleRightFlapOpened(22)
-        self.assertEqual(pbox_state.right_door, DoorState.OPEN)
 
     @patch('paketbox.GPIO')
     @patch('paketbox.setOutputWithRuntime')  # Mock this to avoid timer complexity
@@ -240,64 +208,6 @@ class TestPaketBox(unittest.TestCase):
         lockDoor()
         mock_gpio.output.assert_called_with(26, mock_gpio.LOW)
 
-    @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    @patch('paketbox.Paket_Tuer_Zusteller_geoeffnet')  # Mock to avoid side effects
-    def test_handleDeliveryDoorStatus_opening(self, mock_geoeffnet, mock_sleep, mock_gpio):
-        """Test delivery door status change to open"""
-        # Mock GPIO readings
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        # Both GPIO.input calls should return the same value for consistent state
-        mock_gpio.input.side_effect = [mock_gpio.HIGH, mock_gpio.HIGH]  # Both calls return HIGH for door opening
-        
-        handleDeliveryDoorStatus(23)
-        self.assertEqual(pbox_state.paket_tuer, DoorState.OPEN)
-
-    @patch('paketbox.GPIO')
-    @patch('paketbox.time.sleep')
-    @patch('paketbox.Paket_Tuer_Zusteller_geschlossen')  # Mock to avoid side effects
-    def test_handleDeliveryDoorStatus_closing(self, mock_geschlossen, mock_sleep, mock_gpio):
-        """Test delivery door status change to closed"""
-        # Mock GPIO readings
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        # Both GPIO.input calls should return the same value for consistent state
-        mock_gpio.input.side_effect = [mock_gpio.LOW, mock_gpio.LOW]  # Both calls return LOW for door closing
-        
-        handleDeliveryDoorStatus(23)
-        self.assertEqual(pbox_state.paket_tuer, DoorState.CLOSED)
-
-    @patch('paketbox.GPIO')
-    def test_handleMailboxOpen(self, mock_gpio):
-        """Test mailbox opening handler"""
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        
-        # Should not throw exception and print message
-        handleMailboxOpen(24)
-        # New handlers don't read GPIO, just log - no assertion needed
-
-    @patch('paketbox.GPIO')
-    def test_handlePackageBoxDoorOpen(self, mock_gpio):
-        """Test package box door opening handler"""
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        
-        # Should not throw exception and print message
-        handlePackageBoxDoorOpen(12)
-        # New handlers don't read GPIO, just log - no assertion needed
-
-    @patch('paketbox.GPIO')
-    def test_handleMailboxDoorOpen(self, mock_gpio):
-        """Test mailbox door opening handler"""
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        
-        # Should not throw exception and print message
-        handleMailboxDoorOpen(25)
-        # New handlers don't read GPIO, just log - no assertion needed
-
     def test_PaketBoxState_is_open(self):
         """Test state detection for all flaps open"""
         pbox_state.set_left_door(DoorState.OPEN)
@@ -339,18 +249,6 @@ class TestPaketBox(unittest.TestCase):
         self.assertIn("Klappe rechts: CLOSED", state_str)
         self.assertIn("Pakettür: ERROR", state_str)
 
-    def test_GPIO_debouncing_behavior(self):
-        """Test that handlers properly handle GPIO debouncing"""
-        # Test with HIGH signal (should return early)
-        with patch('paketbox.GPIO') as mock_gpio, patch('paketbox.time.sleep'):
-            mock_gpio.HIGH = 1
-            mock_gpio.input.return_value = mock_gpio.HIGH
-            
-            original_state = pbox_state.left_door
-            handleLeftFlapClosed(27)
-            # State should not change due to HIGH signal
-            self.assertEqual(pbox_state.left_door, original_state)
-
 class TestPaketBoxIntegration(unittest.TestCase):
     """Integration tests for complete system scenarios"""
     
@@ -359,50 +257,6 @@ class TestPaketBoxIntegration(unittest.TestCase):
         pbox_state.set_left_door(DoorState.CLOSED)
         pbox_state.set_right_door(DoorState.CLOSED)
         pbox_state.set_paket_tuer(DoorState.CLOSED)
-
-    @patch('paketbox.GPIO')
-    @patch('paketbox.setOutputWithRuntime')
-    @patch('paketbox.threading.Timer')
-    @patch('paketbox.time.sleep')
-    def test_complete_delivery_cycle_success(self, mock_sleep, mock_timer, mock_setOutput, mock_gpio):
-        """Test a complete successful package delivery cycle"""
-        # Setup GPIO mock
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        mock_gpio.BOTH = 'BOTH'
-        
-        # Capture timer callbacks
-        timer_callbacks = []
-        def create_timer(delay, callback, args=None):
-            timer_callbacks.append((delay, callback, args))
-            timer_mock = MagicMock()
-            return timer_mock
-        mock_timer.side_effect = create_timer
-        
-        # Step 1: Delivery door is opened
-        mock_gpio.input.side_effect = [mock_gpio.HIGH, mock_gpio.HIGH]  # Both calls return HIGH for door opening
-        handleDeliveryDoorStatus(23)
-        self.assertEqual(pbox_state.paket_tuer, DoorState.OPEN)
-        
-        # Step 2: Delivery door is closed (triggers flap opening)
-        mock_gpio.input.side_effect = [mock_gpio.LOW, mock_gpio.LOW]  # Both calls return LOW for door closing  
-        handleDeliveryDoorStatus(23)
-        self.assertEqual(pbox_state.paket_tuer, DoorState.CLOSED)
-        
-        # Step 3: Simulate successful flap opening
-        # Find and execute the opening endlagen_pruefung callback
-        for delay, callback, args in timer_callbacks:
-            if delay == closure_timer_seconds + 1 and args is None:
-                # Simulate flaps opening successfully
-                pbox_state.set_left_door(DoorState.OPEN)
-                pbox_state.set_right_door(DoorState.OPEN)
-                callback()
-                break
-        
-        # Verify flaps are open
-        self.assertEqual(pbox_state.left_door, DoorState.OPEN)
-        self.assertEqual(pbox_state.right_door, DoorState.OPEN)
-        self.assertFalse(pbox_state.is_any_error())
 
     @patch('paketbox.GPIO')
     @patch('paketbox.setOutputWithRuntime')
@@ -468,41 +322,6 @@ class TestPaketBoxIntegration(unittest.TestCase):
                         self.assertEqual(pbox_state.is_open(), expected_is_open)
                         self.assertEqual(pbox_state.is_all_closed(), expected_all_closed)
                         self.assertEqual(pbox_state.is_any_error(), expected_any_error)
-
-    @patch('paketbox.GPIO')
-    def test_gpio_event_simulation(self, mock_gpio):
-        """Test GPIO event handlers with various input scenarios"""
-        # Setup GPIO mock
-        mock_gpio.HIGH = 1
-        mock_gpio.LOW = 0
-        
-        # Test left flap events
-        test_cases = [
-            (handleLeftFlapClosed, 27, DoorState.CLOSED),
-            (handleLeftFlapOpened, 17, DoorState.OPEN),
-            (handleRightFlapClosed, 9, DoorState.CLOSED),
-            (handleRightFlapOpened, 22, DoorState.OPEN),
-        ]
-        
-        # Test left flap handlers
-        for handler, pin, expected_left_state in test_cases[:2]:
-            with self.subTest(handler=handler.__name__, pin=pin):
-                # Reset state
-                pbox_state.set_left_door(DoorState.CLOSED)
-                
-                # Test handler (new handlers set state directly without GPIO reading)
-                handler(pin)
-                self.assertEqual(pbox_state.left_door, expected_left_state)
-        
-        # Test right flap handlers  
-        for handler, pin, expected_right_state in test_cases[2:]:
-            with self.subTest(handler=handler.__name__, pin=pin):
-                # Reset state
-                pbox_state.set_right_door(DoorState.CLOSED)
-                
-                # Test handler (new handlers set state directly without GPIO reading)
-                handler(pin)
-                self.assertEqual(pbox_state.right_door, expected_right_state)
 
     @patch('paketbox.GPIO')
     def test_gpio_output_operations(self, mock_gpio):

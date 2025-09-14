@@ -65,63 +65,6 @@ import time
 
 # Define closure_timer_seconds for test compatibility
 closure_timer_seconds = Config.CLOSURE_TIMER_SECONDS
-
-# Handler functions for GPIO callbacks (for test compatibility)
-def handleLeftFlapClosed(pin):
-    """Handler for left flap closed sensor"""
-    pbox_state.set_left_door(DoorState.CLOSED)
-    logger.info("Entleerungsklappe links ist geschlossen")
-
-def handleLeftFlapOpened(pin):
-    """Handler for left flap opened sensor"""
-    pbox_state.set_left_door(DoorState.OPEN)
-    logger.info("Entleerungsklappe links ist geöffnet")
-
-def handleRightFlapClosed(pin):
-    """Handler for right flap closed sensor"""
-    pbox_state.set_right_door(DoorState.CLOSED)
-    logger.info("Entleerungsklappe rechts ist geschlossen")
-
-def handleRightFlapOpened(pin):
-    """Handler for right flap opened sensor"""
-    pbox_state.set_right_door(DoorState.OPEN)
-    logger.info("Entleerungsklappe rechts ist geöffnet")
-
-def handleDeliveryDoorStatus(pin):
-    """Handler for delivery door status changes with debouncing"""
-    try:
-        # Debouncing: read twice with small delay
-        state1 = GPIO.input(pin)
-        time.sleep(Config.DEBOUNCE_TIME)
-        state2 = GPIO.input(pin)
-        
-        if state1 != state2:
-            logger.debug(f"GPIO {pin} debounce mismatch: {state1} != {state2}")
-            return
-            
-        if state1 == GPIO.HIGH:  # Door opened
-            pbox_state.set_paket_tuer(DoorState.OPEN)
-            logger.info("Pakettür Zusteller geöffnet")
-            logger.info("Türe Paketzusteller wurde geöffnet:")
-            handler.Paket_Tuer_Zusteller_geoeffnet()
-        else:  # Door closed
-            pbox_state.set_paket_tuer(DoorState.CLOSED)
-            logger.info("Pakettür Zusteller geschlossen")
-            handler.Paket_Tuer_Zusteller_geschlossen()
-    except Exception as e:
-        logger.error(f"Fehler in handleDeliveryDoorStatus: {e}")
-
-def handleMailboxOpen(pin):
-    """Handler for mailbox opening"""
-    logger.info("Der Briefkasten wurde geöffnet")
-
-def handlePackageBoxDoorOpen(pin):
-    """Handler for package box door opening"""
-    logger.info("Die Tür zur Paketentnahme wurde geöffnet")
-
-def handleMailboxDoorOpen(pin):
-    """Handler for mailbox door opening"""
-    logger.info("Die Türe zum Briefe entnehmen wurde geöffnet")
 # endregion
 
 
