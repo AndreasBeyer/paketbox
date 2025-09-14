@@ -58,7 +58,7 @@ class PaketBoxState:
    def __init__(self):
       self._lock = threading.Lock()
       self.left_door = DoorState.CLOSED
-      self.right_door = DoorState.CLOSED
+      self.right_door = DoorState.OPEN
       self.paket_tuer = DoorState.CLOSED
 
    def set_left_door(self, state: DoorState):
@@ -101,38 +101,41 @@ class PaketBoxState:
 
 # Initialisiere globalen Zustand
 # Globaler Zustand für PaketBox
-pbox_state = PaketBoxState()
+
 
 def main():
     """Main application entry point - now synchronous for GPIO compatibility."""
+
     try:
+        Config.pbox_state = PaketBoxState()
         # verwende GPIO Nummer statt Board Nummer
         GPIO.setmode(GPIO.BCM)
    
         # Setze alle Inputs
-        for pin in Config.inputs:
+        for pin in Config.INPUTS:
           GPIO.setup(pin, GPIO.IN)
         # Setze alle Outputs auf HIGH (Ruhezustand)
         for output in Config.OUTPUTS:
           GPIO.setup(output, GPIO.OUT)
           GPIO.output(output, GPIO.HIGH)
 
-        statusOld = [0] * len(Config.inputs)
-        statusNew = [0] * len(Config.inputs)
+        statusOld = [0] * len(Config.INPUTS)
+        statusNew = [0] * len(Config.INPUTS)
 
-        for i, pin in enumerate(Config.inputs):
+        for i, pin in enumerate(Config.INPUTS):
            statusOld[i] = GPIO.input(pin)
 
-        pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
-        pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
-        pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
-        logger.info(f"Zustand: {pbox_state}")
+        Config.pbox_state.set_left_door(DoorState.OPEN if statusOld[0] == GPIO.HIGH else DoorState.CLOSED)
+        Config.pbox_state.set_right_door(DoorState.OPEN if statusOld[2] == GPIO.HIGH else DoorState.CLOSED)
+        Config.pbox_state.set_paket_tuer(DoorState.OPEN if statusOld[4] == GPIO.HIGH else DoorState.CLOSED)
+
+        logger.info(f"Zustand: {Config.pbox_state}")
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
         handler.ResetDoors()
-        
-        while True:
+
+        while True: 
            time.sleep(1)  # Main loop - check system state
-           for i, pin in enumerate(Config.inputs):
+           for i, pin in enumerate(Config.INPUTS):
                statusNew[i] = GPIO.input(pin)
                if statusNew[i] != statusOld[i]:
                    handler.pinChanged(i, statusOld[i], statusNew[i])

@@ -6,9 +6,10 @@ class Config:
     DEBOUNCE_TIME = 0.2
     ERROR_REPORT_INTERVAL = 5.0
    
+    pbox_state = None
     # GPIO pin assignments
     # Using BCM numbering
-    inputs = [
+    INPUTS = [
             27,  # 0 Klappe links zu
             17,  # 1 Klappe links auf
             9,   # 2 Klappe rechts zu
