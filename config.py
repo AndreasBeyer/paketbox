@@ -28,7 +28,7 @@ class Config:
             13,  # 2 Klappe rechts zu
             16,  # 3 Klappe rechts auf
             14,  # 4 
-            20,  # 5 
+            20,  # 5 Licht Mülltonne
             15,  # 6 Licht Paketbox
             26   # 7 Riegel Tür
         ]

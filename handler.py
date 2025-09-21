@@ -55,7 +55,10 @@ def pinChanged(pin, oldState, newState):
             setLigthtPaketboxOn()
             if isAnyMotorRunning():
                 logger.warning("Nothalt: Türen sind offen, Motoren werden angehalten.")
-                notHaltMotoren()                
+                notHaltMotoren()
+        elif pin == 9:  
+            logger.info(f"Tür Mültonne geöffnet.")
+            lichtMueltonneOn()
         elif pin == 10:
             logger.info(f"Bewegungsmelder hat ausgelöst.")
 
@@ -88,9 +91,21 @@ def pinChanged(pin, oldState, newState):
         elif pin == 8:
             logger.info(f"Türöffner Taster 6 gedrückt.")
         elif pin == 9:
-            logger.info(f"Türöffner Taster 8 gedrückt.")
+            logger.info(f"Tür Mültonne geschlossen.")
+            lichtMueltonneOff()
+
     else:
         logger.warning(f"pinChanged: oldState == newState keine Änderung erkannt.")
+
+def lichtMueltonneOn():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[5], GPIO.LOW) # Licht an
+    logger.info("Licht Mültonne wurde eingeschaltet.")
+
+def lichtMueltonneOff():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[5], GPIO.HIGH) # Licht aus
+    logger.info("Licht Mültonne wurde ausgeschaltet.")     
 
 def notHaltMotoren():
     GPIO = get_gpio()
