@@ -28,8 +28,8 @@ class Config:
             13,  # 2 Klappe rechts zu
             16,  # 3 Klappe rechts auf
             14,  # 4 
-            20,  # 5 Bremse für Tuer
-            15,  # 6 
+            20,  # 5 
+            15,  # 6 Licht Paketbox
             26   # 7 Riegel Tür
         ]
 

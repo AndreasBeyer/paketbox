@@ -52,6 +52,12 @@ def pinChanged(pin, oldState, newState):
             logger.info(f"Briefkasten Türe zum Leeren geöffnet.")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geöffnet.")
+            setLigthtPaketboxOn()
+            if isAnyMotorRunning():
+                logger.warning("Nothalt: Türen sind offen, Motoren werden angehalten.")
+                notHaltMotoren()                
+        elif pin == 10:
+            logger.info(f"Bewegungsmelder hat ausgelöst.")
 
     elif oldState == 1 and newState == 0: # falling edge
         if pin == 0:
@@ -76,17 +82,44 @@ def pinChanged(pin, oldState, newState):
             logger.info(f"Briefkasten Türe zum Leeren geschlossen.")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geschlossen.")
+            setLigthtPaketboxOff()
             ResetErrorState()
             ResetDoors()
         elif pin == 8:
             logger.info(f"Türöffner Taster 6 gedrückt.")
         elif pin == 9:
             logger.info(f"Türöffner Taster 8 gedrückt.")
-        elif pin == 10:
-            logger.info(f"Bewegungsmelder hat ausgelöst.")
     else:
         logger.warning(f"pinChanged: oldState == newState keine Änderung erkannt.")
 
+def notHaltMotoren():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[0], GPIO.HIGH) # Alle Motoren stoppen
+    GPIO.output(Config.OUTPUTS[1], GPIO.HIGH) 
+    GPIO.output(Config.OUTPUTS[2], GPIO.HIGH) 
+    GPIO.output(Config.OUTPUTS[3], GPIO.HIGH) 
+    GPIO.output(Config.OUTPUTS[7], GPIO.LOW) # Riegel Tür verriegelt
+    logger.warning("Nothalt: Alle Motoren gestoppt und Tür verriegelt.")
+
+def isAnyMotorRunning():
+    GPIO = get_gpio()
+    if not (GPIO.input(Config.OUTPUTS[0]) == GPIO.HIGH and 
+                GPIO.input(Config.OUTPUTS[1]) == GPIO.HIGH and 
+                GPIO.input(Config.OUTPUTS[2]) == GPIO.HIGH and 
+                GPIO.input(Config.OUTPUTS[3]) == GPIO.HIGH):
+        return True
+    else:
+        return False
+
+def setLigthtPaketboxOn():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[6], GPIO.LOW) # Licht an
+    logger.info("Licht Paketbox wurde eingeschaltet.")
+
+def setLigthtPaketboxOff():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[6], GPIO.HIGH) # Licht aus
+    logger.info("Licht Paketbox wurde ausgeschaltet.")
 
 def setOutputWithRuntime(runtime, gpio, state):
     """Set GPIO output for specified runtime, then automatically reset to opposite state."""
