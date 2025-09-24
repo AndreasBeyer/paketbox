@@ -2,6 +2,8 @@ import paho.mqtt.client as mqtt
 import logging
 import time
 
+MQTT_USER = "dein_benutzername"
+MQTT_PASS = "dein_passwort"
 MQTT_BROKER = "server_ip_or_hostname"
 MQTT_PORT = 1883
 MQTT_TOPIC = "home/raspi/paketbox_text"
@@ -35,6 +37,7 @@ def start_mqtt():
     """Initialisiert und startet die MQTT-Verbindung im Hintergrund."""
     global _client
     _client = mqtt.Client()
+    _client.username_pw_set(MQTT_USER, MQTT_PASS)  # <--- Zugangsdaten setzen   
     _client.on_connect = mqtt_connect
     _client.on_disconnect = mqtt_disconnect
     _client.on_message = mqtt_message
