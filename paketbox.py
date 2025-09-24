@@ -6,6 +6,7 @@ import logging
 from PaketBoxState import DoorState
 from config import *
 from state import pbox_state  # Import from central state module
+import mqtt
 
 # Configure logging
 logging.basicConfig(
@@ -102,6 +103,8 @@ def main():
           GPIO.setup(output, GPIO.OUT)
           GPIO.output(output, GPIO.HIGH)
 
+        mqtt.start_mqtt()
+        mqtt.publish_status("Paketbox bereit")
         # Initialize door states based on current GPIO readings
         statusOld = initialize_door_states()
         statusNew = [0] * len(Config.INPUTS)
@@ -130,6 +133,8 @@ def main():
     finally:
         GPIO.cleanup()
         logger.info("GPIO aufgeräumt.")
+        mqtt.stop_mqtt()
+        logger.info("MQTT gestoppt.")
 
 # Diese Zeilen sorgen dafür, dass das Skript nur ausgeführt wird,
 # wenn es direkt gestartet wird (und nicht importiert).
