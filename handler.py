@@ -3,8 +3,10 @@ import threading
 import logging
 from PaketBoxState import DoorState
 from config import Config
-from state import pbox_state  # Import from central state module
+from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
 import time
+import mqtt
+
 
 # Import GPIO from paketbox to use the same Mock/Real GPIO instance
 def get_gpio():
@@ -33,60 +35,55 @@ def ResetErrorState():
         # Re-initialize door states based on actual GPIO readings
         initialize_door_states = get_initialize_door_states()
         initialize_door_states()
+        global sendMqttErrorState
+        sendMqttErrorState = False  # Reset MQTT error state flag
         
         logger.info(f"Fehlerzustand behoben. Aktueller Zustand: {pbox_state}")
+    elif isDoorLocked():
+        unlockDoor() 
     else:
         logger.info("Kein Fehlerzustand erkannt - keine Aktion erforderlich")
         
     return not pbox_state.is_any_error()
 
-def pinChanged(pin, oldState, newState):
-    if oldState == 0 and newState == 1: # rising edge  
-        if pin == 4:
-            pbox_state.set_paket_tuer(DoorState.OPEN)
-            logger.info(f"Paketklappe Zusteller geöffnet.") 
-            Paket_Tuer_Zusteller_geoeffnet()
-        elif pin == 5:
-            logger.info(f"Briefkasten Zusteller geöffnet.")
-        elif pin == 6:
-            logger.info(f"Briefkasten Türe zum Leeren geöffnet.")
-        elif pin == 7:
-            logger.info(f"Paketbox Türe zum Leeren geöffnet.")
+def lichtMueltonneOn():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[5], GPIO.LOW) # Licht an
+    logger.info("Licht Mültonne wurde eingeschaltet.")
 
-    elif oldState == 1 and newState == 0: # falling edge
-        if pin == 0:
-            pbox_state.set_left_door(DoorState.CLOSED)
-            logger.info(f"Packet Klappe links geschlossen/oben.")
-        elif pin == 1:
-            pbox_state.set_left_door(DoorState.OPEN)
-            logger.info(f"Packet Klappe links geöffnet/unten.")
-        elif pin == 2:
-            pbox_state.set_right_door(DoorState.CLOSED)
-            logger.info(f"Packet Klappe recht geschlossen/oben.")
-        elif pin == 3:
-            pbox_state.set_right_door(DoorState.OPEN)
-            logger.info(f"Packet Klappe rechts geöffnet/unten.")
-        elif pin == 4:
-            pbox_state.set_paket_tuer(DoorState.CLOSED)
-            logger.info(f"Paketklappe Zusteller geschlossen.")
-            Paket_Tuer_Zusteller_geschlossen()
-        elif pin == 5:
-            logger.info(f"Briefkasten Zusteller geschlossen.")
-        elif pin == 6:
-            logger.info(f"Briefkasten Türe zum Leeren geschlossen.")
-        elif pin == 7:
-            logger.info(f"Paketbox Türe zum Leeren geschlossen.")
-            ResetErrorState()
-            ResetDoors()
-        elif pin == 8:
-            logger.info(f"Türöffner Taster 6 gedrückt.")
-        elif pin == 9:
-            logger.info(f"Türöffner Taster 8 gedrückt.")
-        elif pin == 10:
-            logger.info(f"Bewegungsmelder hat ausgelöst.")
+def lichtMueltonneOff():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[5], GPIO.HIGH) # Licht aus
+    logger.info("Licht Mültonne wurde ausgeschaltet.")     
+
+def notHaltMotoren():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[0], GPIO.HIGH) # Alle Motoren stoppen
+    GPIO.output(Config.OUTPUTS[1], GPIO.HIGH) 
+    GPIO.output(Config.OUTPUTS[2], GPIO.HIGH) 
+    GPIO.output(Config.OUTPUTS[3], GPIO.HIGH) 
+    GPIO.output(Config.OUTPUTS[7], GPIO.LOW) # Riegel Tür verriegelt
+    logger.warning("Nothalt: Alle Motoren gestoppt und Tür verriegelt.")
+
+def isAnyMotorRunning():
+    GPIO = get_gpio()
+    if not (GPIO.input(Config.OUTPUTS[0]) == GPIO.HIGH and 
+                GPIO.input(Config.OUTPUTS[1]) == GPIO.HIGH and 
+                GPIO.input(Config.OUTPUTS[2]) == GPIO.HIGH and 
+                GPIO.input(Config.OUTPUTS[3]) == GPIO.HIGH):
+        return True
     else:
-        logger.warning(f"pinChanged: oldState == newState keine Änderung erkannt.")
+        return False
 
+def setLigthtPaketboxOn():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[6], GPIO.LOW) # Licht an
+    logger.info("Licht Paketbox wurde eingeschaltet.")
+
+def setLigthtPaketboxOff():
+    GPIO = get_gpio()
+    GPIO.output(Config.OUTPUTS[6], GPIO.HIGH) # Licht aus
+    logger.info("Licht Paketbox wurde ausgeschaltet.")
 
 def setOutputWithRuntime(runtime, gpio, state):
     """Set GPIO output for specified runtime, then automatically reset to opposite state."""
@@ -122,6 +119,17 @@ def lockDoor():
       logger.info("Türe Paketzusteller wurde verriegelt.")
    except Exception as e:
       logger.error(f"Hardwarefehler in lockDoor: {e}")
+
+def isDoorLocked():
+   try:
+      GPIO = get_gpio()
+      if GPIO.input(Config.OUTPUTS[7]) == GPIO.LOW:
+         return True
+      else:
+         return False
+   except Exception as e:
+      logger.error(f"Hardwarefehler in isDoorLocked: {e}")
+      return None
 
 def Klappen_schliessen():
     """Close both flaps with proper error handling and state validation."""

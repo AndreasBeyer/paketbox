@@ -5,6 +5,16 @@ class Config:
     MOTOR_REVERSE_SIGNAL = CLOSURE_TIMER_SECONDS - 1
     DEBOUNCE_TIME = 0.2
     ERROR_REPORT_INTERVAL = 5.0
+
+    MQTT_USER = "dein_benutzername"
+    MQTT_PASS = "dein_passwort"
+    MQTT_BROKER = "server_ip_or_hostname"
+    MQTT_PORT = 1883
+    MQTT_TOPIC_MESSAGE = "home/raspi/paketbox_text"
+    MQTT_TOPIC_PAKETZUSTELLER = "home/raspi/paketbox"
+    MQTT_TOPIC_BRIEFKASTEN = "home/raspi/briefkasten"
+    MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN = "home/raspi/briefkastenleeren"
+    MQTT_TOPIC_PAKETBOX_ENTLEEREN = "home/raspi/paketboxleeren"
    
     # GPIO pin assignments
     # Using BCM numbering
@@ -28,8 +38,8 @@ class Config:
             13,  # 2 Klappe rechts zu
             16,  # 3 Klappe rechts auf
             14,  # 4 
-            20,  # 5 Bremse für Tuer
-            15,  # 6 
+            20,  # 5 Licht Mülltonne
+            15,  # 6 Licht Paketbox
             26   # 7 Riegel Tür
         ]
 
