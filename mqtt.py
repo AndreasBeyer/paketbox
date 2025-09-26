@@ -1,7 +1,7 @@
 import paho.mqtt.client as mqtt
 import logging
 import time
-import config
+from config import Config as config
 
 logger = logging.getLogger(__name__)
 
@@ -52,7 +52,7 @@ def stop_mqtt():
 def publish_status(message):
     """Sendet eine Statusnachricht über MQTT."""
     if _client:
-        _client.publish(config.MQTT_TOPIC, message)
+        _client.publish(config.MQTT_TOPIC_MESSAGE, message)
         logger.info(f"MQTT gesendet: {message}")
     else:
         logger.warning("MQTT-Client nicht verbunden, Nachricht nicht gesendet.")
