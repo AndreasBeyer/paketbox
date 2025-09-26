@@ -47,7 +47,6 @@ def ResetErrorState():
     return not pbox_state.is_any_error()
 
 def pinChanged(pin, oldState, newState):
-    global mqttObject
     if oldState == 0 and newState == 1: # rising edge  
         if pin == 4:
             pbox_state.set_paket_tuer(DoorState.OPEN)
