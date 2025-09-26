@@ -95,6 +95,7 @@ def main():
           GPIO.output(output, GPIO.HIGH)
 
         global mqttObject
+        mqttObject = mqtt
         mqttObject.start_mqtt()
         mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Paketbox bereit.")
         # Initialize door states based on current GPIO readings
