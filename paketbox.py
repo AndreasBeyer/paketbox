@@ -52,16 +52,7 @@ except ImportError:
 
 # Import handler after state is defined to avoid circular imports
 import handler
-
-# Re-export functions from handler for backward compatibility
-from handler import (
-    Klappen_oeffnen, Klappen_schliessen, 
-    unlockDoor, lockDoor, setOutputWithRuntime,
-    Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet
-)
-
 # Re-export modules for test compatibility
-import threading
 import time
 
 # Define closure_timer_seconds for test compatibility
@@ -102,9 +93,10 @@ def main():
         for output in Config.OUTPUTS:
           GPIO.setup(output, GPIO.OUT)
           GPIO.output(output, GPIO.HIGH)
-
+          
+        global mqtt
         mqtt.start_mqtt()
-        mqtt.publish_status("Paketbox bereit")
+        mqtt.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Paketbox bereit.")
         # Initialize door states based on current GPIO readings
         statusOld = initialize_door_states()
         statusNew = [0] * len(Config.INPUTS)
@@ -125,7 +117,7 @@ def main():
            # Monitor for error conditions
            if ( not sendMqttErrorState and pbox_state.is_any_error()):
                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
-               mqtt.publish_status(F"FEHLER Paketbox: {pbox_state}")
+               mqtt.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} FEHLER Paketbox: {pbox_state}")
                sendMqttErrorState = True
 
     except KeyboardInterrupt:
