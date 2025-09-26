@@ -5,7 +5,7 @@ from PaketBoxState import DoorState
 from config import Config
 from state import pbox_state, sendMqttErrorState, mqtt  # Import from central state module
 import time
-import mqtt
+
 
 # Import GPIO from paketbox to use the same Mock/Real GPIO instance
 def get_gpio():
