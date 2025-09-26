@@ -5,7 +5,7 @@ import sys
 import logging
 from PaketBoxState import DoorState
 from config import *
-from state import pbox_state, sendMqttErrorState  # Import from central state module
+from state import pbox_state, sendMqttErrorState, mqtt  # Import from central state module
 import mqtt
 
 # Configure logging
@@ -93,7 +93,7 @@ def main():
         for output in Config.OUTPUTS:
           GPIO.setup(output, GPIO.OUT)
           GPIO.output(output, GPIO.HIGH)
-          
+
         global mqtt
         mqtt.start_mqtt()
         mqtt.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Paketbox bereit.")

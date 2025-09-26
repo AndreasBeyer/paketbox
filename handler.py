@@ -3,7 +3,7 @@ import threading
 import logging
 from PaketBoxState import DoorState
 from config import Config
-from state import pbox_state, sendMqttErrorState  # Import from central state module
+from state import pbox_state, sendMqttErrorState, mqtt  # Import from central state module
 import time
 import mqtt
 
