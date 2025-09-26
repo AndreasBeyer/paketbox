@@ -3,8 +3,9 @@ import threading
 import logging
 from PaketBoxState import DoorState
 from config import Config
-from state import pbox_state  # Import from central state module
+from state import pbox_state, sendMqttErrorState  # Import from central state module
 import time
+import mqtt
 
 # Import GPIO from paketbox to use the same Mock/Real GPIO instance
 def get_gpio():
@@ -33,8 +34,12 @@ def ResetErrorState():
         # Re-initialize door states based on actual GPIO readings
         initialize_door_states = get_initialize_door_states()
         initialize_door_states()
+        global sendMqttErrorState
+        sendMqttErrorState = False  # Reset MQTT error state flag
         
         logger.info(f"Fehlerzustand behoben. Aktueller Zustand: {pbox_state}")
+    elif isDoorLocked():
+        unlockDoor() 
     else:
         logger.info("Kein Fehlerzustand erkannt - keine Aktion erforderlich")
         
@@ -46,12 +51,16 @@ def pinChanged(pin, oldState, newState):
             pbox_state.set_paket_tuer(DoorState.OPEN)
             logger.info(f"Paketklappe Zusteller geöffnet.") 
             Paket_Tuer_Zusteller_geoeffnet()
+            mqtt.publish_paket_zusteller_event("ON")
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geöffnet.")
+            mqtt.publish_briefkasten_event("ON")
         elif pin == 6:
             logger.info(f"Briefkasten Türe zum Leeren geöffnet.")
+            mqtt.publish_briefkasten_entleeren_event("ON")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geöffnet.")
+            mqtt.publish_paketbox_entleeren_event("ON")
             setLigthtPaketboxOn()
             if isAnyMotorRunning():
                 logger.warning("Nothalt: Türen sind offen, Motoren werden angehalten.")
@@ -78,13 +87,17 @@ def pinChanged(pin, oldState, newState):
         elif pin == 4:
             pbox_state.set_paket_tuer(DoorState.CLOSED)
             logger.info(f"Paketklappe Zusteller geschlossen.")
+            mqtt.publish_paket_zusteller_event("OFF")  
             Paket_Tuer_Zusteller_geschlossen()
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geschlossen.")
+            mqtt.publish_briefkasten_event("OFF")
         elif pin == 6:
             logger.info(f"Briefkasten Türe zum Leeren geschlossen.")
+            mqtt.publish_briefkasten_entleeren_event("OFF")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geschlossen.")
+            mqtt.publish_paketbox_entleeren_event("OFF")
             setLigthtPaketboxOff()
             ResetErrorState()
             ResetDoors()
@@ -170,6 +183,17 @@ def lockDoor():
       logger.info("Türe Paketzusteller wurde verriegelt.")
    except Exception as e:
       logger.error(f"Hardwarefehler in lockDoor: {e}")
+
+def isDoorLocked():
+   try:
+      GPIO = get_gpio()
+      if GPIO.input(Config.OUTPUTS[7]) == GPIO.LOW:
+         return True
+      else:
+         return False
+   except Exception as e:
+      logger.error(f"Hardwarefehler in isDoorLocked: {e}")
+      return None
 
 def Klappen_schliessen():
     """Close both flaps with proper error handling and state validation."""

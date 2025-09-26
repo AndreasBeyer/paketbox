@@ -5,7 +5,7 @@ import sys
 import logging
 from PaketBoxState import DoorState
 from config import *
-from state import pbox_state  # Import from central state module
+from state import pbox_state, sendMqttErrorState  # Import from central state module
 import mqtt
 
 # Configure logging
@@ -111,6 +111,7 @@ def main():
 
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
         handler.ResetDoors()
+        global sendMqttErrorState
 
         while True: 
            time.sleep(1)  # Main loop - check system state
@@ -121,11 +122,12 @@ def main():
                    logger.info(f"GPIO {pin} changed: {statusOld[i]} -> {statusNew[i]}")
                    statusOld[i] = statusNew[i]
 
-#            # Monitor for error conditions
-#            if pbox_state.is_any_error():
-#                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
-#                time.sleep(Config.ERROR_REPORT_INTERVAL)  # Slow down error reporting
-                
+           # Monitor for error conditions
+           if ( not sendMqttErrorState and pbox_state.is_any_error()):
+               logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
+               mqtt.publish_status(F"FEHLER Paketbox: {pbox_state}")
+               sendMqttErrorState = True
+
     except KeyboardInterrupt:
         logger.info("Beendet mit Strg+C")
     except Exception as e:
