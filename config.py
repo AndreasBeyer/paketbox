@@ -1,4 +1,5 @@
 # Configuration constants
+import os
 
 class Config:
     CLOSURE_TIMER_SECONDS = 65
@@ -6,15 +7,16 @@ class Config:
     DEBOUNCE_TIME = 0.2
     ERROR_REPORT_INTERVAL = 5.0
 
-    MQTT_USER = "dein_benutzername"
-    MQTT_PASS = "dein_passwort"
-    MQTT_BROKER = "server_ip_or_hostname"
-    MQTT_PORT = 1883
-    MQTT_TOPIC_MESSAGE = "home/raspi/paketbox_text"
-    MQTT_TOPIC_PAKETZUSTELLER = "home/raspi/paketbox"
-    MQTT_TOPIC_BRIEFKASTEN = "home/raspi/briefkasten"
-    MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN = "home/raspi/briefkastenleeren"
-    MQTT_TOPIC_PAKETBOX_ENTLEEREN = "home/raspi/paketboxleeren"
+    # MQTT Configuration - uses environment variables with fallback defaults for testing
+    MQTT_USER = os.environ.get('MQTT_USER', 'dein_benutzername')
+    MQTT_PASS = os.environ.get('MQTT_PASS', 'dein_passwort')
+    MQTT_BROKER = os.environ.get('MQTT_BROKER', 'server_ip_or_hostname')
+    MQTT_PORT = int(os.environ.get('MQTT_PORT', '1883'))
+    MQTT_TOPIC_MESSAGE = os.environ.get('MQTT_TOPIC_MESSAGE', 'home/raspi/paketbox_text')
+    MQTT_TOPIC_PAKETZUSTELLER = os.environ.get('MQTT_TOPIC_PAKETZUSTELLER', 'home/raspi/paketbox')
+    MQTT_TOPIC_BRIEFKASTEN = os.environ.get('MQTT_TOPIC_BRIEFKASTEN', 'home/raspi/briefkasten')
+    MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN = os.environ.get('MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN', 'home/raspi/briefkastenleeren')
+    MQTT_TOPIC_PAKETBOX_ENTLEEREN = os.environ.get('MQTT_TOPIC_PAKETBOX_ENTLEEREN', 'home/raspi/paketboxleeren')
    
     # GPIO pin assignments
     # Using BCM numbering

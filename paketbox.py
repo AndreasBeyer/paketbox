@@ -84,16 +84,20 @@ def pinChanged(pin, oldState, newState):
             pbox_state.set_paket_tuer(DoorState.OPEN)
             logger.info(f"Paketklappe Zusteller geöffnet.") 
             handler.Paket_Tuer_Zusteller_geoeffnet()
-            mqttObject.publish_paket_zusteller_event("ON")
+            if mqttObject:
+                mqttObject.publish_paket_zusteller_event("ON")
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geöffnet.")
-            mqttObject.publish_briefkasten_event("ON")
+            if mqttObject:
+                mqttObject.publish_briefkasten_event("ON")
         elif pin == 6:
             logger.info(f"Briefkasten Türe zum Leeren geöffnet.")
-            mqttObject.publish_briefkasten_entleeren_event("ON")
+            if mqttObject:
+                mqttObject.publish_briefkasten_entleeren_event("ON")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geöffnet.")
-            mqttObject.publish_paketbox_entleeren_event("ON")
+            if mqttObject:
+                mqttObject.publish_paketbox_entleeren_event("ON")
             handler.setLigthtPaketboxOn()
             if handler.isAnyMotorRunning():
                 logger.warning("Nothalt: Türen sind offen, Motoren werden angehalten.")
@@ -120,17 +124,21 @@ def pinChanged(pin, oldState, newState):
         elif pin == 4:
             pbox_state.set_paket_tuer(DoorState.CLOSED)
             logger.info(f"Paketklappe Zusteller geschlossen.")
-            mqttObject.publish_paket_zusteller_event("OFF")  
+            if mqttObject:
+                mqttObject.publish_paket_zusteller_event("OFF")  
             handler.Paket_Tuer_Zusteller_geschlossen()
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geschlossen.")
-            mqttObject.publish_briefkasten_event("OFF")
+            if mqttObject:
+                mqttObject.publish_briefkasten_event("OFF")
         elif pin == 6:
             logger.info(f"Briefkasten Türe zum Leeren geschlossen.")
-            mqttObject.publish_briefkasten_entleeren_event("OFF")
+            if mqttObject:
+                mqttObject.publish_briefkasten_entleeren_event("OFF")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geschlossen.")
-            mqttObject.publish_paketbox_entleeren_event("OFF")
+            if mqttObject:
+                mqttObject.publish_paketbox_entleeren_event("OFF")
             handler.setLigthtPaketboxOff()
             handler.ResetErrorState()
             handler.ResetDoors()
@@ -180,7 +188,8 @@ def main():
            # Monitor for error conditions
            if ( not sendMqttErrorState and pbox_state.is_any_error()):
                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
-               mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} FEHLER Paketbox: {pbox_state}")
+               if mqttObject:
+                   mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} FEHLER Paketbox: {pbox_state}")
                sendMqttErrorState = True
 
     except KeyboardInterrupt:

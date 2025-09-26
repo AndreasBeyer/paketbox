@@ -5,16 +5,12 @@ import threading
 import time
 
 # Importiere die wichtigsten Symbole aus dem Hauptscript
-from paketbox import (
-    DoorState,
-    Klappen_oeffnen, Klappen_schliessen, 
-    unlockDoor, lockDoor
-)
+from paketbox import DoorState, initialize_door_states, pinChanged
 from state import pbox_state  # Import from central state module
 from handler import (
-    pinChanged, Klappen_oeffnen_abbrechen, 
-    Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet,
-    Klappen_oeffnen, Klappen_schliessen
+    Klappen_oeffnen, Klappen_schliessen, Klappen_oeffnen_abbrechen,
+    unlockDoor, lockDoor,
+    Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet
 )  # Import handler functions to test
 from config import Config  # Import Config for timer values
 
@@ -26,8 +22,8 @@ class TestPaketBox(unittest.TestCase):
         pbox_state.set_paket_tuer(DoorState.CLOSED)
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.setOutputWithRuntime')  # Mock this to avoid timer complexity
-    @patch('paketbox.threading.Timer')
+    @patch('handler.setOutputWithRuntime')  # Mock this to avoid timer complexity
+    @patch('handler.threading.Timer')
     def test_Klappen_oeffnen_success(self, mock_timer, mock_setOutput, mock_gpio):
         """Test successful flap opening operation"""
         # Setup GPIO mock
@@ -63,8 +59,8 @@ class TestPaketBox(unittest.TestCase):
         self.assertFalse(pbox_state.is_any_error())
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.setOutputWithRuntime')  # Mock this to avoid timer complexity
-    @patch('paketbox.threading.Timer')
+    @patch('handler.setOutputWithRuntime')  # Mock this to avoid timer complexity
+    @patch('handler.threading.Timer')
     def test_Klappen_oeffnen_error(self, mock_timer, mock_setOutput, mock_gpio):
         """Test flap opening error condition"""
         # Setup GPIO mock
@@ -98,8 +94,8 @@ class TestPaketBox(unittest.TestCase):
         self.assertTrue(pbox_state.is_any_error())
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.setOutputWithRuntime')  # Mock this to avoid timer complexity
-    @patch('paketbox.threading.Timer')
+    @patch('handler.setOutputWithRuntime')  # Mock this to avoid timer complexity
+    @patch('handler.threading.Timer')
     def test_Klappen_schliessen_success(self, mock_timer, mock_setOutput, mock_gpio):
         """Test successful flap closing operation"""
         # Setup initial state with open flaps
@@ -139,8 +135,8 @@ class TestPaketBox(unittest.TestCase):
         self.assertFalse(pbox_state.is_any_error())
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.setOutputWithRuntime')  # Mock this to avoid timer complexity
-    @patch('paketbox.threading.Timer')
+    @patch('handler.setOutputWithRuntime')  # Mock this to avoid timer complexity
+    @patch('handler.threading.Timer')
     def test_Klappen_schliessen_error(self, mock_timer, mock_setOutput, mock_gpio):
         """Test flap closing error condition"""
         # Setup initial state with open flaps
@@ -782,8 +778,8 @@ class TestPaketBoxIntegration(unittest.TestCase):
         pbox_state.set_paket_tuer(DoorState.CLOSED)
 
     @patch('paketbox.GPIO')
-    @patch('paketbox.setOutputWithRuntime')
-    @patch('paketbox.threading.Timer')
+    @patch('handler.setOutputWithRuntime')
+    @patch('handler.threading.Timer')
     def test_error_recovery_scenario(self, mock_timer, mock_setOutput, mock_gpio):
         """Test system behavior during error conditions and recovery"""
         # Setup GPIO mock
