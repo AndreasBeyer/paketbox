@@ -11,10 +11,10 @@ class Config:
     MQTT_BROKER = "server_ip_or_hostname"
     MQTT_PORT = 1883
     MQTT_TOPIC_MESSAGE = "home/raspi/paketbox_text"
-    MQTT_TOPIC_PAKETZUSTELLER = "paketbox/event/paketbox"
-    MQTT_TOPIC_BRIEFKASTEN = "paketbox/event/briefkasten"
-    MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN = "paketbox/event/briefkastenleeren"
-    MQTT_TOPIC_PAKETBOX_ENTLEEREN = "paketbox/event/paketboxleeren"
+    MQTT_TOPIC_PAKETZUSTELLER = "home/raspi/paketbox"
+    MQTT_TOPIC_BRIEFKASTEN = "home/raspi/briefkasten"
+    MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN = "home/raspi/briefkastenleeren"
+    MQTT_TOPIC_PAKETBOX_ENTLEEREN = "home/raspi/paketboxleeren"
    
     # GPIO pin assignments
     # Using BCM numbering
