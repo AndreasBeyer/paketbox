@@ -10,7 +10,7 @@ _client = None  # interne Referenz für den MQTT-Client
 def mqtt_connect(client, userdata, flags, rc):
     if rc == 0:
         logger.info("Verbunden mit MQTT-Broker")
-        client.subscribe(config.MQTT_TOPIC)
+        client.subscribe(config.MQTT_TOPIC_MESSAGE)
     else:
         logger.warning(f"MQTT-Verbindung fehlgeschlagen, Rückgabecode: {rc}")
 
