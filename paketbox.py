@@ -5,7 +5,7 @@ import sys
 import logging
 from PaketBoxState import DoorState
 from config import *
-from state import pbox_state, sendMqttErrorState, mqtt  # Import from central state module
+from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
 import mqtt
 
 # Configure logging
@@ -94,9 +94,9 @@ def main():
           GPIO.setup(output, GPIO.OUT)
           GPIO.output(output, GPIO.HIGH)
 
-        global mqtt
-        mqtt.start_mqtt()
-        mqtt.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Paketbox bereit.")
+        global mqttObject
+        mqttObject.start_mqtt()
+        mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Paketbox bereit.")
         # Initialize door states based on current GPIO readings
         statusOld = initialize_door_states()
         statusNew = [0] * len(Config.INPUTS)
@@ -117,7 +117,7 @@ def main():
            # Monitor for error conditions
            if ( not sendMqttErrorState and pbox_state.is_any_error()):
                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
-               mqtt.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} FEHLER Paketbox: {pbox_state}")
+               mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} FEHLER Paketbox: {pbox_state}")
                sendMqttErrorState = True
 
     except KeyboardInterrupt:
@@ -127,7 +127,7 @@ def main():
     finally:
         GPIO.cleanup()
         logger.info("GPIO aufgeräumt.")
-        mqtt.stop_mqtt()
+        mqttObject.stop_mqtt()
         logger.info("MQTT gestoppt.")
 
 # Diese Zeilen sorgen dafür, dass das Skript nur ausgeführt wird,
