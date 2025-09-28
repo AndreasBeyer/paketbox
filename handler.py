@@ -1,7 +1,7 @@
 
 import threading
 import logging
-from PaketBoxState import DoorState
+from PaketBoxState import DoorState, MotorState
 from config import Config
 from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
 import time
@@ -66,14 +66,8 @@ def notHaltMotoren():
     logger.warning("Nothalt: Alle Motoren gestoppt und Tür verriegelt.")
 
 def isAnyMotorRunning():
-    GPIO = get_gpio()
-    if not (GPIO.input(Config.OUTPUTS[0]) == GPIO.HIGH and 
-                GPIO.input(Config.OUTPUTS[1]) == GPIO.HIGH and 
-                GPIO.input(Config.OUTPUTS[2]) == GPIO.HIGH and 
-                GPIO.input(Config.OUTPUTS[3]) == GPIO.HIGH):
-        return True
-    else:
-        return False
+    """Check if any motor is currently running using state management."""
+    return pbox_state.is_any_motor_running()
 
 def setLigthtPaketboxOn():
     GPIO = get_gpio()
@@ -140,12 +134,19 @@ def Klappen_schliessen():
         return False
     
     logger.info("Klappen fahren zu")
+    # Set motor states to CLOSING
+    pbox_state.set_left_motor(MotorState.CLOSING)
+    pbox_state.set_right_motor(MotorState.CLOSING)
+    
     # Start closing motors
     timerLeftFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[0], GPIO.LOW)
     timerRightFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[2], GPIO.LOW)
 
     if not timerLeftFlap or not timerRightFlap:
         logger.error("Fehler beim Starten der Motoren!")
+        # Reset motor states on error
+        pbox_state.set_left_motor(MotorState.ERROR)
+        pbox_state.set_right_motor(MotorState.ERROR)
         return False
     
     def endlagen_pruefung_closing():
@@ -155,9 +156,15 @@ def Klappen_schliessen():
             logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
             pbox_state.set_left_door(DoorState.ERROR)
             pbox_state.set_right_door(DoorState.ERROR)
+            # Set motor states to ERROR
+            pbox_state.set_left_motor(MotorState.ERROR)
+            pbox_state.set_right_motor(MotorState.ERROR)
             return False
         else:
             logger.info("Klappen erfolgreich geschlossen.")
+            # Set motor states to STOPPED after successful closing
+            pbox_state.set_left_motor(MotorState.STOPPED)
+            pbox_state.set_right_motor(MotorState.STOPPED)
             unlockDoor()
             return True
 
@@ -223,12 +230,19 @@ def Klappen_oeffnen():
         return False
 
     logger.info("Klappen fahren auf")
+    # Set motor states to OPENING
+    pbox_state.set_left_motor(MotorState.OPENING)
+    pbox_state.set_right_motor(MotorState.OPENING)
+    
     # Start opening motors
     timer1 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[1], GPIO.LOW)
     timer2 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[3], GPIO.LOW)
 
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
+        # Reset motor states on error
+        pbox_state.set_left_motor(MotorState.ERROR)
+        pbox_state.set_right_motor(MotorState.ERROR)
         return False
     
     def endlagen_pruefung():
@@ -238,9 +252,15 @@ def Klappen_oeffnen():
             logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
             pbox_state.set_left_door(DoorState.ERROR)
             pbox_state.set_right_door(DoorState.ERROR)
+            # Set motor states to ERROR
+            pbox_state.set_left_motor(MotorState.ERROR)
+            pbox_state.set_right_motor(MotorState.ERROR)
             return False
         else:
             logger.info("Klappen erfolgreich geöffnet.")
+            # Set motor states to STOPPED after successful opening
+            pbox_state.set_left_motor(MotorState.STOPPED)
+            pbox_state.set_right_motor(MotorState.STOPPED)
             logger.info(f"Starte automatisches Schließen der Klappen... Status: {pbox_state}")
             # Auto-close after successful opening
             if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):

@@ -3,7 +3,7 @@
 import time
 import sys
 import logging
-from PaketBoxState import DoorState
+from PaketBoxState import DoorState, MotorState
 from config import *
 from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
 import mqtt

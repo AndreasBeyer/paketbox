@@ -5,7 +5,7 @@ import threading
 import time
 
 # Importiere die wichtigsten Symbole aus dem Hauptscript
-from paketbox import DoorState, initialize_door_states, pinChanged
+from paketbox import DoorState, MotorState, initialize_door_states, pinChanged
 from state import pbox_state  # Import from central state module
 from handler import (
     Klappen_oeffnen, Klappen_schliessen, Klappen_oeffnen_abbrechen,
@@ -20,6 +20,8 @@ class TestPaketBox(unittest.TestCase):
         pbox_state.set_left_door(DoorState.CLOSED)
         pbox_state.set_right_door(DoorState.CLOSED)
         pbox_state.set_paket_tuer(DoorState.CLOSED)
+        pbox_state.set_left_motor(MotorState.STOPPED)
+        pbox_state.set_right_motor(MotorState.STOPPED)
 
     @patch('paketbox.GPIO')
     @patch('handler.setOutputWithRuntime')  # Mock this to avoid timer complexity
@@ -525,11 +527,90 @@ class TestPaketBox(unittest.TestCase):
         pbox_state.set_left_door(DoorState.OPEN)
         pbox_state.set_right_door(DoorState.CLOSED)
         pbox_state.set_paket_tuer(DoorState.ERROR)
+        pbox_state.set_left_motor(MotorState.OPENING)
         
         state_str = str(pbox_state)
         self.assertIn("Klappe links: OPEN", state_str)
         self.assertIn("Klappe rechts: CLOSED", state_str)
         self.assertIn("Pakettür: ERROR", state_str)
+        self.assertIn("Motor links: OPENING", state_str)
+        self.assertIn("Motor rechts: STOPPED", state_str)
+
+    def test_MotorState_is_any_motor_running(self):
+        """Test motor running state detection"""
+        # Initially no motors running
+        self.assertFalse(pbox_state.is_any_motor_running())
+        
+        # Test left motor opening
+        pbox_state.set_left_motor(MotorState.OPENING)
+        self.assertTrue(pbox_state.is_any_motor_running())
+        
+        # Reset and test right motor closing
+        pbox_state.set_left_motor(MotorState.STOPPED)
+        pbox_state.set_right_motor(MotorState.CLOSING)
+        self.assertTrue(pbox_state.is_any_motor_running())
+        
+        # Test both stopped
+        pbox_state.set_right_motor(MotorState.STOPPED)
+        self.assertFalse(pbox_state.is_any_motor_running())
+
+    def test_MotorState_are_both_motors_stopped(self):
+        """Test both motors stopped detection"""
+        # Initially both stopped
+        self.assertTrue(pbox_state.are_both_motors_stopped())
+        
+        # One motor running
+        pbox_state.set_left_motor(MotorState.OPENING)
+        self.assertFalse(pbox_state.are_both_motors_stopped())
+        
+        # Both motors in error state
+        pbox_state.set_left_motor(MotorState.ERROR)
+        pbox_state.set_right_motor(MotorState.ERROR)
+        self.assertFalse(pbox_state.are_both_motors_stopped())
+        
+        # Back to both stopped
+        pbox_state.set_left_motor(MotorState.STOPPED)
+        pbox_state.set_right_motor(MotorState.STOPPED)
+        self.assertTrue(pbox_state.are_both_motors_stopped())
+
+    def test_MotorState_is_any_motor_error(self):
+        """Test motor error state detection"""
+        # Initially no motor errors
+        self.assertFalse(pbox_state.is_any_motor_error())
+        
+        # Set left motor to error
+        pbox_state.set_left_motor(MotorState.ERROR)
+        self.assertTrue(pbox_state.is_any_motor_error())
+        
+        # Set both motors to error
+        pbox_state.set_right_motor(MotorState.ERROR)
+        self.assertTrue(pbox_state.is_any_motor_error())
+        
+        # Reset one motor
+        pbox_state.set_left_motor(MotorState.STOPPED)
+        self.assertTrue(pbox_state.is_any_motor_error())  # Still one in error
+        
+        # Reset both motors
+        pbox_state.set_right_motor(MotorState.STOPPED)
+        self.assertFalse(pbox_state.is_any_motor_error())
+
+    def test_MotorState_error_included_in_any_error(self):
+        """Test that motor errors are included in general error detection"""
+        # Initially no errors
+        self.assertFalse(pbox_state.is_any_error())
+        
+        # Motor error should trigger general error
+        pbox_state.set_left_motor(MotorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+        
+        # Reset motor, add door error
+        pbox_state.set_left_motor(MotorState.STOPPED)
+        pbox_state.set_left_door(DoorState.ERROR)
+        self.assertTrue(pbox_state.is_any_error())
+        
+        # Reset all
+        pbox_state.set_left_door(DoorState.CLOSED)
+        self.assertFalse(pbox_state.is_any_error())
 
     def test_pinChanged_falling_edge_flap_positions(self):
         """Test pinChanged for flap position sensors on falling edge"""
