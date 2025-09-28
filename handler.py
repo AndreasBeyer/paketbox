@@ -205,6 +205,10 @@ def Klappen_schliessen():
 def Paket_Tuer_Zusteller_geschlossen():
     logger.info("Türe Paketzusteller wurde geschlossen.")
     
+    # Cancel 15-Minuten-Überwachung da Tür jetzt geschlossen ist
+    timer_manager.cancel_timer('door_open_watchdog')
+    logger.info("15-Minuten-Überwachung für geöffnete Paket-Tür abgebrochen.")
+    
     # Cancel any existing timer using timer manager
     timer_manager.cancel_timer('delayed_open')
     logger.info("Vorherigen Klappen-Öffnungs-Timer abgebrochen.")
@@ -248,7 +252,37 @@ def Paket_Tuer_Zusteller_geoeffnet():
          logger.warning(f"Fehler: Tür wurde geöffnet und Klappen waren nicht zu.")
          Klappen_schliessen()
 
-    logger.info("Türe Paketzusteller wurde geöffnet:")
+    logger.info("Türe Paketzusteller wurde geöffnet")
+    
+    # Starte 15-Minuten-Überwachung für geöffnete Paket-Tür
+    def door_open_watchdog():
+        # Clear timer reference when executing
+        timer_manager.clear_timer('door_open_watchdog')
+        
+        # Check if door is still open after 15 minutes
+        if pbox_state.paket_tuer == DoorState.OPEN:
+            logger.warning("WARNUNG: Paket-Tür ist seit 15 Minuten geöffnet! Öffne Klappen zur Entleerung...")
+            
+            # Sende MQTT-Fehlernachricht
+            try:
+                import mqtt
+                if hasattr(mqtt, 'publish_status'):
+                    error_message = f"FEHLER: Paket-Tür seit 15 Minuten geöffnet - automatische Entleerung gestartet"
+                    mqtt.publish_status(error_message)
+                    logger.info(f"MQTT-Fehlernachricht gesendet: {error_message}")
+            except Exception as e:
+                logger.error(f"Fehler beim Senden der MQTT-Nachricht: {e}")
+            
+            # Öffne Klappen zur Entleerung
+            Klappen_oeffnen()
+        else:
+            logger.debug("15-Minuten-Timer abgelaufen, aber Paket-Tür ist bereits geschlossen.")
+    
+    # Starte 15-Minuten-Timer (15 * 60 = 900 Sekunden)
+    watchdog_timer = threading.Timer(900.0, door_open_watchdog)
+    watchdog_timer.start()
+    timer_manager.add_timer('door_open_watchdog', watchdog_timer)
+    logger.info("15-Minuten-Überwachung für geöffnete Paket-Tür gestartet.")
 
 def Klappen_oeffnen():
     """Open both flaps with proper error handling and state validation."""

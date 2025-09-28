@@ -14,7 +14,8 @@ class TimerManager:
             'right_motor': None,
             'left_check': None,
             'right_check': None,
-            'delayed_open': None
+            'delayed_open': None,
+            'door_open_watchdog': None  # 15-Minuten-Überwachung für geöffnete Paket-Tür
         }
         self._lock = threading.Lock()
 
