@@ -2,6 +2,7 @@
 import threading
 import logging
 from PaketBoxState import DoorState, MotorState
+from TimerManager import TimerManager
 from config import Config
 from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
 import time
@@ -21,8 +22,8 @@ def get_initialize_door_states():
 
 logger = logging.getLogger(__name__) 
 
-# Global timer for managing flap opening delay
-_klappen_oeffnen_timer = None 
+# Global timer manager instance
+timer_manager = TimerManager() 
 
 def ResetErrorState():
     """Reset all doors from ERROR state to CLOSED state."""
@@ -63,7 +64,15 @@ def notHaltMotoren():
     GPIO.output(Config.OUTPUTS[2], GPIO.HIGH) 
     GPIO.output(Config.OUTPUTS[3], GPIO.HIGH) 
     GPIO.output(Config.OUTPUTS[7], GPIO.LOW) # Riegel Tür verriegelt
-    logger.warning("Nothalt: Alle Motoren gestoppt und Tür verriegelt.")
+    
+    # Cancel all active motor timers
+    timer_manager.cancel_all_timers()
+    
+    # Set motor states to error due to emergency stop
+    pbox_state.set_left_motor(MotorState.ERROR)
+    pbox_state.set_right_motor(MotorState.ERROR)
+    
+    logger.warning("Nothalt: Alle Motoren gestoppt, Timer abgebrochen und Tür verriegelt.")
 
 def isAnyMotorRunning():
     """Check if any motor is currently running using state management."""
@@ -79,7 +88,7 @@ def setLigthtPaketboxOff():
     GPIO.output(Config.OUTPUTS[6], GPIO.HIGH) # Licht aus
     logger.info("Licht Paketbox wurde ausgeschaltet.")
 
-def setOutputWithRuntime(runtime, gpio, state):
+def setOutputWithRuntime(runtime, gpio, state, timer_id=None):
     """Set GPIO output for specified runtime, then automatically reset to opposite state."""
     try:
       GPIO = get_gpio()
@@ -88,9 +97,17 @@ def setOutputWithRuntime(runtime, gpio, state):
          opposite_state = GPIO.LOW if state == GPIO.HIGH else GPIO.HIGH
          GPIO.output(gpio, opposite_state)
          logger.debug(f"GPIO {gpio} zurückgeschaltet zu {opposite_state}")
+         # Clear timer reference when completed normally
+         if timer_id:
+             timer_manager.clear_timer(timer_id)
         
       timer = threading.Timer(runtime, reset_output)
       timer.start()
+      
+      # Register timer with manager if timer_id provided
+      if timer_id:
+          timer_manager.add_timer(timer_id, timer)
+          
       return timer  # Return timer for potential cancellation
     except Exception as e:
       logger.error(f"Hardwarefehler in setOutputWithRuntime: {e}")
@@ -138,9 +155,9 @@ def Klappen_schliessen():
     pbox_state.set_left_motor(MotorState.CLOSING)
     pbox_state.set_right_motor(MotorState.CLOSING)
     
-    # Start closing motors
-    timerLeftFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[0], GPIO.LOW)
-    timerRightFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[2], GPIO.LOW)
+    # Start closing motors with timer management
+    timerLeftFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[0], GPIO.LOW, 'left_motor')
+    timerRightFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[2], GPIO.LOW, 'right_motor')
 
     if not timerLeftFlap or not timerRightFlap:
         logger.error("Fehler beim Starten der Motoren!")
@@ -151,6 +168,9 @@ def Klappen_schliessen():
     
     def endlagen_pruefung_closing():
         """Check end positions after closing timeout."""
+        # Clear timer reference
+        timer_manager.clear_timer('left_check')
+        
         if not (pbox_state.left_door == DoorState.CLOSED and pbox_state.right_door == DoorState.CLOSED):
             logger.error(f"Fehler: Klappen nicht geschlossen nach Schließungsversuch!")
             logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
@@ -170,21 +190,22 @@ def Klappen_schliessen():
 
     timerCheckClosing = threading.Timer(Config.CLOSURE_TIMER_SECONDS + 1, endlagen_pruefung_closing)
     timerCheckClosing.start()
+    timer_manager.add_timer('left_check', timerCheckClosing)
     return True
 
 def Paket_Tuer_Zusteller_geschlossen():
-    global _klappen_oeffnen_timer
     logger.info("Türe Paketzusteller wurde geschlossen.")
     
-    # Cancel any existing timer
-    if _klappen_oeffnen_timer:
-        _klappen_oeffnen_timer.cancel()
-        logger.info("Vorherigen Klappen-Öffnungs-Timer abgebrochen.")
+    # Cancel any existing timer using timer manager
+    timer_manager.cancel_timer('delayed_open')
+    logger.info("Vorherigen Klappen-Öffnungs-Timer abgebrochen.")
     
     logger.info("Starte verzögertes Öffnen der Klappen in 10 Sekunden...")
     
     def delayed_klappen_oeffnen():
-        global _klappen_oeffnen_timer
+        # Clear timer reference when executing
+        timer_manager.clear_timer('delayed_open')
+        
         # Check if door is still closed before opening flaps
         if pbox_state.paket_tuer == DoorState.CLOSED:
             logger.info("10 Sekunden vergangen, starte Öffnen der Klappen...")
@@ -192,18 +213,17 @@ def Paket_Tuer_Zusteller_geschlossen():
             Klappen_oeffnen()
         else:
             logger.warning("Klappen-Öffnung abgebrochen: Paketzusteller-Tür ist wieder geöffnet!")
-        _klappen_oeffnen_timer = None
     
-    _klappen_oeffnen_timer = threading.Timer(10.0, delayed_klappen_oeffnen)
-    _klappen_oeffnen_timer.start()
+    delayed_timer = threading.Timer(10.0, delayed_klappen_oeffnen)
+    delayed_timer.start()
+    timer_manager.add_timer('delayed_open', delayed_timer)
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
 
 
 def Klappen_oeffnen_abbrechen():    
-    global _klappen_oeffnen_timer
-    if _klappen_oeffnen_timer:
-        _klappen_oeffnen_timer.cancel()
-        _klappen_oeffnen_timer = None
+    """Cancel delayed flap opening timer using timer manager."""
+    if timer_manager.active_timers['delayed_open'] is not None:
+        timer_manager.cancel_timer('delayed_open')
         logger.info("Klappen-Öffnung wurde abgebrochen.")
         return True
     else:
@@ -234,9 +254,9 @@ def Klappen_oeffnen():
     pbox_state.set_left_motor(MotorState.OPENING)
     pbox_state.set_right_motor(MotorState.OPENING)
     
-    # Start opening motors
-    timer1 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[1], GPIO.LOW)
-    timer2 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[3], GPIO.LOW)
+    # Start opening motors with timer management
+    timer1 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[1], GPIO.LOW, 'left_motor')
+    timer2 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[3], GPIO.LOW, 'right_motor')
 
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
@@ -247,6 +267,9 @@ def Klappen_oeffnen():
     
     def endlagen_pruefung():
         """Check end positions after opening timeout."""
+        # Clear timer reference
+        timer_manager.clear_timer('right_check')
+        
         if not (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
             logger.error(f"Fehler: Klappen nicht offen nach Öffnungsversuch!")
             logger.error(f"Status: Links={pbox_state.left_door.name}, Rechts={pbox_state.right_door.name}")
@@ -271,6 +294,7 @@ def Klappen_oeffnen():
 
     timer = threading.Timer(Config.CLOSURE_TIMER_SECONDS + 1, endlagen_pruefung)
     timer.start()
+    timer_manager.add_timer('right_check', timer)
     return True
 
 def ResetDoors():
