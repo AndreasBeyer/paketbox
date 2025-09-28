@@ -1,8 +1,8 @@
 # Timer state management for active motor timers
-from handler import logger
-
-
 import threading
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class TimerManager:
