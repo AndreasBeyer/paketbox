@@ -26,16 +26,25 @@ logger = logging.getLogger(__name__)
 timer_manager = TimerManager() 
 
 def ResetErrorState():
-    """Reset all doors from ERROR state to CLOSED state."""
+    """Reset all doors and motors from ERROR state to safe state."""
     logger.info("Starte Reset des Fehlerzustands...")
     
-    # Check if any door is in error state
+    # Check if any door or motor is in error state
     if pbox_state.is_any_error():
-        logger.warning("Fehlerzustand erkannt - setze alle Türen auf CLOSED zurück")
+        logger.warning("Fehlerzustand erkannt - setze alle Türen und Motoren auf sicheren Zustand zurück")
                 
         # Re-initialize door states based on actual GPIO readings
         initialize_door_states = get_initialize_door_states()
         initialize_door_states()
+        
+        # Reset motor states from ERROR to STOPPED
+        if pbox_state.is_any_motor_error():
+            logger.info("Setze Motor-Fehlerzustände zurück...")
+            from PaketBoxState import MotorState
+            pbox_state.set_left_motor(MotorState.STOPPED)
+            pbox_state.set_right_motor(MotorState.STOPPED)
+            logger.info("Motor-Zustände auf STOPPED zurückgesetzt")
+        
         global sendMqttErrorState
         sendMqttErrorState = False  # Reset MQTT error state flag
         
