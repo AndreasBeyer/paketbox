@@ -4,7 +4,8 @@ import logging
 from PaketBoxState import DoorState, MotorState
 from TimerManager import TimerManager
 from config import Config
-from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
+from state import pbox_state  # Import from central state module
+import state
 import time
 import mqtt
 
@@ -45,8 +46,7 @@ def ResetErrorState():
             pbox_state.set_right_motor(MotorState.STOPPED)
             logger.info("Motor-Zustände auf STOPPED zurückgesetzt")
         
-        global sendMqttErrorState
-        sendMqttErrorState = False  # Reset MQTT error state flag
+        state.sendMqttErrorState = False  # Reset MQTT error state flag
         
         logger.info(f"Fehlerzustand behoben. Aktueller Zustand: {pbox_state}")
     elif isDoorLocked():
