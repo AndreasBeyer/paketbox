@@ -5,8 +5,16 @@ import threading
 import time
 
 # Importiere die wichtigsten Symbole aus dem Hauptscript
-from paketbox import DoorState, MotorState, initialize_door_states, pinChanged
+from paketbox import (
+    DoorState,
+    MotorState,
+    initialize_door_states,
+    pinChanged,
+    publish_error_state_if_needed,
+)
 from state import pbox_state  # Import from central state module
+import state
+import handler
 from handler import (
     Klappen_oeffnen, Klappen_schliessen, Klappen_oeffnen_abbrechen,
     unlockDoor, lockDoor,
@@ -22,6 +30,8 @@ class TestPaketBox(unittest.TestCase):
         pbox_state.set_paket_tuer(DoorState.CLOSED)
         pbox_state.set_left_motor(MotorState.STOPPED)
         pbox_state.set_right_motor(MotorState.STOPPED)
+        state.sendMqttErrorState = False
+        state.mqttObject = None
 
     @patch('paketbox.GPIO')
     @patch('handler.setOutputWithRuntime')  # Mock this to avoid timer complexity
@@ -412,9 +422,43 @@ class TestPaketBox(unittest.TestCase):
         
         # Verify first motor was attempted
         self.assertGreaterEqual(mock_setOutput.call_count, 1)
-        
+
         # Timer should not be started for endlagen_pruefung
         mock_timer.assert_not_called()
+
+    @patch('handler.get_initialize_door_states')
+    def test_ResetErrorState_allows_subsequent_mqtt_publish(self, mock_get_initialize):
+        """Ensure ResetErrorState clears the MQTT error suppression flag."""
+
+        def fake_initialize():
+            pbox_state.set_left_door(DoorState.CLOSED)
+            pbox_state.set_right_door(DoorState.CLOSED)
+            pbox_state.set_paket_tuer(DoorState.CLOSED)
+
+        mock_get_initialize.return_value = fake_initialize
+
+        mock_mqtt = MagicMock()
+        state.mqttObject = mock_mqtt
+
+        # Trigger initial error and publish
+        pbox_state.set_left_door(DoorState.ERROR)
+        with patch('time.strftime', return_value='2024-01-01 00:00:00'):
+            publish_error_state_if_needed()
+
+        self.assertTrue(state.sendMqttErrorState)
+        self.assertEqual(mock_mqtt.publish_status.call_count, 1)
+
+        # Reset the error state and suppression flag
+        handler.ResetErrorState()
+        self.assertFalse(state.sendMqttErrorState)
+        self.assertFalse(pbox_state.is_any_error())
+
+        # Trigger a new error to ensure publish happens again
+        pbox_state.set_left_motor(MotorState.ERROR)
+        with patch('time.strftime', return_value='2024-01-01 00:00:01'):
+            publish_error_state_if_needed()
+
+        self.assertEqual(mock_mqtt.publish_status.call_count, 2)
 
     @patch('handler.get_gpio')
     @patch('handler.setOutputWithRuntime')
