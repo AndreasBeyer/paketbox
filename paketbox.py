@@ -1,5 +1,5 @@
 # Paketbox control script
-# Version 0.7.0
+# Version 0.8.0
 import time
 import sys
 import logging
@@ -99,14 +99,12 @@ def pinChanged(pin, oldState, newState):
             if mqttObject:
                 mqttObject.publish_paketbox_entleeren_event("ON")
             handler.setLigthtPaketboxOn()
-            if handler.isAnyMotorRunning():
-                logger.warning("Nothalt: Türen sind offen, Motoren werden angehalten.")
-                handler.notHaltMotoren()
         elif pin == 9:  
             logger.info(f"Tür Mültonne geöffnet.")
             handler.lichtMueltonneOn()
         elif pin == 10:
-            logger.info(f"Bewegungsmelder hat ausgelöst.")
+            logger.info(f"Lichtschranke ist nicht mehr ausgelöst.")
+            handler.reset_light_barrier()
 
     elif oldState == 1 and newState == 0: # falling edge
         if pin == 0:
@@ -140,13 +138,16 @@ def pinChanged(pin, oldState, newState):
             if mqttObject:
                 mqttObject.publish_paketbox_entleeren_event("OFF")
             handler.setLigthtPaketboxOff()
-            handler.ResetErrorState()
-            handler.ResetDoors()
+            # handler.ResetErrorState()
+            # handler.ResetDoors()
         elif pin == 8:
             logger.info(f"Türöffner Taster 6 gedrückt.")
         elif pin == 9:
             logger.info(f"Tür Mültonne geschlossen.")
             handler.lichtMueltonneOff()
+        elif pin == 10:
+            logger.info(f"Lichtschranke hat ausgelöst.")
+            handler.set_light_barrier_triggered(True)
 
     else:
         logger.warning(f"pinChanged: oldState == newState keine Änderung erkannt.")
@@ -175,9 +176,21 @@ def main():
         logger.info("Init abgeschlossen. Strg+C zum Beenden drücken.")
         handler.ResetDoors()
         global sendMqttErrorState
+        
+        # Initialize timing for periodic auto-lock checks
+        import time as time_module
+        last_lock_check_time = time_module.time()
+        lock_check_interval = 60  # Check every 60 seconds
 
         while True: 
            time.sleep(1)  # Main loop - check system state
+           current_time = time_module.time()
+           
+           # Perform periodic auto-lock check
+           if current_time - last_lock_check_time >= lock_check_interval:
+               handler.auto_check_and_lock_door()
+               last_lock_check_time = current_time
+           
            for i, pin in enumerate(Config.INPUTS):
                statusNew[i] = GPIO.input(pin)
                if statusNew[i] != statusOld[i]:

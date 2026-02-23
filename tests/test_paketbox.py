@@ -692,7 +692,7 @@ class TestPaketBox(unittest.TestCase):
         test_cases_falling = [
             (8, "Türöffner Taster 6"),
             (9, "Türöffner Taster 8"),
-            (10, "Bewegungsmelder"),
+            (10, "Lichtschranke"),
         ]
         
         for pin, description in test_cases_falling:
@@ -743,9 +743,13 @@ class TestPaketBox(unittest.TestCase):
         # Start the delayed opening process
         Paket_Tuer_Zusteller_geschlossen()
         
-        # Verify timer was created and started
-        mock_timer.assert_called_once_with(10.0, unittest.mock.ANY)
-        mock_timer_instance.start.assert_called_once()
+        # Verify timer was created and started with correct delay
+        mock_timer.assert_called()
+        # Check that the timer was called with 60 second delay (Config.CLOSURE_DELAY)
+        calls = mock_timer.call_args_list
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0][0], 60)  # First arg should be timer delay
+        mock_timer_instance.start.assert_called()
         
         # Now cancel the opening
         result = Klappen_oeffnen_abbrechen()
@@ -991,14 +995,14 @@ class TestPaketBoxIntegration(unittest.TestCase):
             return timer_instance
         mock_timer.side_effect = create_timer
         
-        # Step 1: Package door closed (starts 10-second timer)
+        # Step 1: Package door closed (starts 60-second timer)
         Paket_Tuer_Zusteller_geschlossen()
         
-        # Find the 10-second delayed opening timer (not the 900-second watchdog from previous open)
-        delayed_open_timers = [(i, d, c) for i, (d, c) in enumerate(timer_callbacks) if d == 10.0]
-        self.assertGreater(len(delayed_open_timers), 0, "Expected at least one 10-second timer")
+        # Find the 60-second delayed opening timer (Config.CLOSURE_DELAY)
+        delayed_open_timers = [(i, d, c) for i, (d, c) in enumerate(timer_callbacks) if d == 60.0]
+        self.assertGreater(len(delayed_open_timers), 0, "Expected at least one 60-second timer")
         first_timer_idx, delay, callback = delayed_open_timers[0]
-        self.assertEqual(delay, 10.0)
+        self.assertEqual(delay, 60.0)
         
         # Step 2: Package door opened again within 10 seconds (should cancel timer)
         Paket_Tuer_Zusteller_geoeffnet()
@@ -1018,9 +1022,9 @@ class TestPaketBoxIntegration(unittest.TestCase):
         pbox_state.set_paket_tuer(DoorState.CLOSED)
         Paket_Tuer_Zusteller_geschlossen()
         
-        # Find the new 10-second timer
-        delayed_open_timers_2 = [(i, d, c) for i, (d, c) in enumerate(timer_callbacks) if d == 10.0]
-        self.assertGreater(len(delayed_open_timers_2), 1, "Expected at least two 10-second timers")
+        # Find the new 60-second timer
+        delayed_open_timers_2 = [(i, d, c) for i, (d, c) in enumerate(timer_callbacks) if d == 60.0]
+        self.assertGreater(len(delayed_open_timers_2), 1, "Expected at least two 60-second timers")
         second_timer_idx, delay2, new_callback = delayed_open_timers_2[1]
         
         # Execute callback with door still closed

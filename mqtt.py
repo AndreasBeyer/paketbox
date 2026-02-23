@@ -17,6 +17,9 @@ def mqtt_connect(client, userdata, flags, rc):
     if rc == 0:
         logger.info("Verbunden mit MQTT-Broker")
         client.subscribe(config.MQTT_TOPIC_MESSAGE)
+        client.subscribe(config.MQTT_TOPIC_PAKETBOX_AUTO_LOCK_DOOR)
+        logger.info(f"Abonnement: {config.MQTT_TOPIC_MESSAGE}")
+        logger.info(f"Abonnement: {config.MQTT_TOPIC_PAKETBOX_AUTO_LOCK_DOOR}")
     else:
         logger.warning(f"MQTT-Verbindung fehlgeschlagen, Rückgabecode: {rc}")
 
@@ -49,6 +52,24 @@ def mqtt_disconnect(client, userdata, rc):
 
 def mqtt_message(client, userdata, msg):
     logger.info(f"Nachricht empfangen: {msg.topic} {msg.payload.decode()}")
+    
+    # Handle auto lock door setting
+    if msg.topic == config.MQTT_TOPIC_PAKETBOX_AUTO_LOCK_DOOR:
+        payload = msg.payload.decode().lower()
+        if payload in ['true', '1', 'on', 'yes']:
+            logger.info("Auto-Lock-Door aktiviert via MQTT")
+            try:
+                from handler import set_auto_lock_door
+                set_auto_lock_door(True)
+            except Exception as e:
+                logger.error(f"Fehler beim Setzen von auto_lock_door: {e}")
+        elif payload in ['false', '0', 'off', 'no']:
+            logger.info("Auto-Lock-Door deaktiviert via MQTT")
+            try:
+                from handler import set_auto_lock_door
+                set_auto_lock_door(False)
+            except Exception as e:
+                logger.error(f"Fehler beim Setzen von auto_lock_door: {e}")
 
 def start_mqtt():
     """Initialisiert und startet die MQTT-Verbindung im Hintergrund."""

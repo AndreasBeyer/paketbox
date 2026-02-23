@@ -2,10 +2,17 @@
 import os
 
 class Config:
+    CLOSURE_DELAY = 60
     CLOSURE_TIMER_SECONDS = 65
-    MOTOR_REVERSE_SIGNAL = CLOSURE_TIMER_SECONDS - 1
+    OPENING_TIMER_SECONDS = 65
+    MOTOR_REVERSE_SIGNAL_CLOSE = CLOSURE_TIMER_SECONDS - 1
+    MOTOR_REVERSE_SIGNAL_OPEN = CLOSURE_TIMER_SECONDS - 1
     DEBOUNCE_TIME = 0.2
     ERROR_REPORT_INTERVAL = 5.0
+
+    # Door Lock Time Window
+    TIME_LOCK_DOOR = "00:00"      # Uhrzeit Beginn (Tür verriegeln ab dieser Uhrzeit)
+    TIME_UNLOCK_DOOR = "05:30"    # Uhrzeit Ende (Tür entriegeln ab dieser Uhrzeit)
 
     # MQTT Configuration - uses environment variables with fallback defaults for testing
     MQTT_USER = os.environ.get('MQTT_USER', 'dein_benutzername')
@@ -17,7 +24,10 @@ class Config:
     MQTT_TOPIC_BRIEFKASTEN = os.environ.get('MQTT_TOPIC_BRIEFKASTEN', 'home/raspi/briefkasten')
     MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN = os.environ.get('MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN', 'home/raspi/briefkastenleeren')
     MQTT_TOPIC_PAKETBOX_ENTLEEREN = os.environ.get('MQTT_TOPIC_PAKETBOX_ENTLEEREN', 'home/raspi/paketboxleeren')
-   
+    MQTT_TOPIC_PAKETBOX_LOCK_DOOR = os.environ.get('MQTT_TOPIC_PAKETBOX_LOCK_DOOR', 'home/raspi/paketboxlockdoor')
+    MQTT_TOPIC_PAKETBOX_AUTO_LOCK_DOOR = os.environ.get('MQTT_TOPIC_PAKETBOX_AUTO_LOCK_DOOR', 'home/raspi/paketboxautolockdoor')  
+
+
     # GPIO pin assignments
     # Using BCM numbering
     INPUTS = [
@@ -29,9 +39,9 @@ class Config:
             24,  # 5 Briefkasten Magnetkontak
             25,  # 6 Briefkasten Türe zum leeren
             12,  # 7 Paketbox Tür zum leeren
-            8,   # 8 Türöffner 6 Taster
-            7,   # 9 Türffner 8 Taster
-            11   # 10 Bewegungsmelder
+            8,   # 8 frei
+            7,   # 9 frei
+            11   # 10 Lichtschranke
         ]
     
     OUTPUTS = [

@@ -7,6 +7,7 @@ from config import Config
 from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
 import time
 import mqtt
+from datetime import datetime
 
 
 # Import GPIO from paketbox to use the same Mock/Real GPIO instance
@@ -23,7 +24,10 @@ def get_initialize_door_states():
 logger = logging.getLogger(__name__) 
 
 # Global timer manager instance
-timer_manager = TimerManager() 
+timer_manager = TimerManager()
+
+# Global light barrier state
+light_barrier_triggered = False 
 
 def ResetErrorState():
     """Reset all doors and motors from ERROR state to safe state."""
@@ -121,6 +125,27 @@ def setOutputWithRuntime(runtime, gpio, state, timer_id=None):
     except Exception as e:
       logger.error(f"Hardwarefehler in setOutputWithRuntime: {e}")
       return None
+
+# region Light Barrier Functions
+
+def set_light_barrier_triggered(triggered):
+    """Set the light barrier triggered state."""
+    global light_barrier_triggered
+    light_barrier_triggered = triggered
+    state = "ausgelöst" if triggered else "zurückgesetzt"
+    logger.warning(f"Lichtschranke {state}.")
+
+def is_light_barrier_triggered():
+    """Check if light barrier is currently triggered."""
+    return light_barrier_triggered
+
+def reset_light_barrier():
+    """Reset light barrier state."""
+    global light_barrier_triggered
+    light_barrier_triggered = False
+    logger.info("Lichtschranke-Status zurückgesetzt.")
+
+# endregion
     
 # region Actions
 
@@ -155,6 +180,12 @@ def Klappen_schliessen():
     """Close both flaps with proper error handling and state validation."""
     GPIO = get_gpio()
     
+    # Check if light barrier is triggered - prevent closing if so
+    if is_light_barrier_triggered():
+        logger.error("NOTHALT: Lichtschranke ausgelöst! Klappen können nicht geschlossen werden.")
+        notHaltMotoren()
+        return False
+    
     if pbox_state.is_any_error():
         logger.warning("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
         return False
@@ -165,8 +196,8 @@ def Klappen_schliessen():
     pbox_state.set_right_motor(MotorState.CLOSING)
     
     # Start closing motors with timer management
-    timerLeftFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[0], GPIO.LOW, 'left_motor')
-    timerRightFlap = setOutputWithRuntime(Config.CLOSURE_TIMER_SECONDS, Config.OUTPUTS[2], GPIO.LOW, 'right_motor')
+    timerLeftFlap = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL_CLOSE, Config.OUTPUTS[0], GPIO.LOW, 'left_motor')
+    timerRightFlap = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL_CLOSE, Config.OUTPUTS[2], GPIO.LOW, 'right_motor')
 
     if not timerLeftFlap or not timerRightFlap:
         logger.error("Fehler beim Starten der Motoren!")
@@ -179,6 +210,12 @@ def Klappen_schliessen():
         """Check end positions after closing timeout."""
         # Clear timer reference
         timer_manager.clear_timer('left_check')
+        
+        # Check if light barrier was triggered during closing
+        if is_light_barrier_triggered():
+            logger.error("NOTHALT: Lichtschranke während Klappenfahrt ausgelöst!")
+            notHaltMotoren()
+            return False
         
         if not (pbox_state.left_door == DoorState.CLOSED and pbox_state.right_door == DoorState.CLOSED):
             logger.error(f"Fehler: Klappen nicht geschlossen nach Schließungsversuch!")
@@ -221,13 +258,13 @@ def Paket_Tuer_Zusteller_geschlossen():
         
         # Check if door is still closed before opening flaps
         if pbox_state.paket_tuer == DoorState.CLOSED:
-            logger.info("10 Sekunden vergangen, starte Öffnen der Klappen...")
+            logger.info("60 Sekunden vergangen, starte Öffnen der Klappen...")
             lockDoor()
             Klappen_oeffnen()
         else:
             logger.warning("Klappen-Öffnung abgebrochen: Paketzusteller-Tür ist wieder geöffnet!")
     
-    delayed_timer = threading.Timer(10.0, delayed_klappen_oeffnen)
+    delayed_timer = threading.Timer(Config.CLOSURE_DELAY, delayed_klappen_oeffnen)
     delayed_timer.start()
     timer_manager.add_timer('delayed_open', delayed_timer)
     # Audiofile: Box wird geleert, dies dauert 2 Minuten
@@ -298,8 +335,8 @@ def Klappen_oeffnen():
     pbox_state.set_right_motor(MotorState.OPENING)
     
     # Start opening motors with timer management
-    timer1 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[1], GPIO.LOW, 'left_motor')
-    timer2 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL, Config.OUTPUTS[3], GPIO.LOW, 'right_motor')
+    timer1 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL_OPEN, Config.OUTPUTS[1], GPIO.LOW, 'left_motor')
+    timer2 = setOutputWithRuntime(Config.MOTOR_REVERSE_SIGNAL_OPEN, Config.OUTPUTS[3], GPIO.LOW, 'right_motor')
 
     if not timer1 or not timer2:
         logger.error("Fehler beim Starten der Motoren!")
@@ -324,6 +361,8 @@ def Klappen_oeffnen():
             return False
         else:
             logger.info("Klappen erfolgreich geöffnet.")
+            # Reset light barrier when flaps open (for emptying process)
+            # reset_light_barrier()
             # Set motor states to STOPPED after successful opening
             pbox_state.set_left_motor(MotorState.STOPPED)
             pbox_state.set_right_motor(MotorState.STOPPED)
@@ -335,7 +374,7 @@ def Klappen_oeffnen():
                logger.error(f"Fehler: Klappen nicht beide im OPEN-Zustand!")
             return True
 
-    timer = threading.Timer(Config.CLOSURE_TIMER_SECONDS + 1, endlagen_pruefung)
+    timer = threading.Timer(Config.OPENING_TIMER_SECONDS + 1, endlagen_pruefung)
     timer.start()
     timer_manager.add_timer('right_check', timer)
     return True
@@ -353,3 +392,76 @@ def ResetDoors():
     else:
        logger.info("Doors already in safe state.")
        return True
+
+# endregion
+
+# region Auto Lock Door Time Functions
+
+# Global variable to track auto lock door setting
+auto_lock_door_enabled = False
+
+def set_auto_lock_door(enabled):
+    """Set the auto lock door feature to enabled or disabled."""
+    global auto_lock_door_enabled
+    auto_lock_door_enabled = enabled
+    state = "aktiviert" if enabled else "deaktiviert"
+    logger.info(f"Automatische Türverriegelung {state}.")
+
+def is_auto_lock_door_enabled():
+    """Return whether auto lock door is enabled."""
+    return auto_lock_door_enabled
+
+def is_in_lock_period():
+    """Check if current time is within the lock period (TIME_LOCK_DOOR to TIME_UNLOCK_DOOR)."""
+    try:
+        current_time = datetime.now().time()
+        
+        # Parse lock and unlock times
+        lock_time = datetime.strptime(Config.TIME_LOCK_DOOR, "%H:%M").time()
+        unlock_time = datetime.strptime(Config.TIME_UNLOCK_DOOR, "%H:%M").time()
+        
+        # If lock_time is after unlock_time, it means the lock period spans midnight
+        # e.g., 20:00 to 08:00 means locked from 20:00 to 23:59 and 00:00 to 08:00
+        if lock_time > unlock_time:
+            is_locked = current_time >= lock_time or current_time < unlock_time
+        else:
+            # Lock period is within the same day
+            is_locked = lock_time <= current_time < unlock_time
+        
+        logger.debug(f"Zeit-Check: Aktuell={current_time.strftime('%H:%M')}, Sperren={lock_time.strftime('%H:%M')}, Entsperren={unlock_time.strftime('%H:%M')}, In Sperrzeit={is_locked}")
+        return is_locked
+    except Exception as e:
+        logger.error(f"Fehler bei Zeit-Überprüfung: {e}")
+        return False
+
+def auto_check_and_lock_door():
+    """Automatically lock or unlock door based on time and auto_lock_door setting."""
+    if not is_auto_lock_door_enabled():
+        return
+    
+    try:
+        should_be_locked = is_in_lock_period()
+        is_currently_locked = isDoorLocked()
+        
+        if should_be_locked and not is_currently_locked:
+            logger.info("Automatische Verriegelung: Tür wird verriegelt (Sperrzeit aktiv).")
+            lockDoor()
+            if mqttObject:
+                try:
+                    mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Türe wurde automatisch verriegelt (Sperrzeit).")
+                except Exception as e:
+                    logger.debug(f"MQTT-Publish fehlgeschlagen: {e}")
+        
+        elif not should_be_locked and is_currently_locked:
+            logger.info("Automatische Entsperrung: Tür wird entriegelt (Sperrzeit vorbei).")
+            unlockDoor()
+            if mqttObject:
+                try:
+                    mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Türe wurde automatisch entriegelt (Sperrzeit vorbei).")
+                except Exception as e:
+                    logger.debug(f"MQTT-Publish fehlgeschlagen: {e}")
+    
+    except Exception as e:
+        logger.error(f"Fehler bei automatischer Türverriegelung: {e}")
+
+# endregion

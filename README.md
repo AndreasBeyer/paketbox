@@ -2,6 +2,9 @@
 
 ![Tests](https://github.com/AndreasBeyer/paketbox/workflows/Paketbox%20Tests/badge.svg)
 
+![Paketbox](Paketbox.jpeg)
+*Die intelligente Paketbox mit automatischer Lieferannahme und Verriegelung.*
+
 Dieses Projekt steuert eine intelligente Paketbox mit einem Raspberry Pi. Die Box kann Pakete sicher aufnehmen, automatisch verriegeln und entleeren. Die Steuerung erfolgt über Motoren, Sensoren und Relais mit professioneller Fehlerbehandlung und Logging.
 
 ## ✨ Features
@@ -28,10 +31,9 @@ Dieses Projekt steuert eine intelligente Paketbox mit einem Raspberry Pi. Die Bo
 - **Relais-Board** für Motorsteuerung und Türverriegelung
 - **Sensoren**:
   - Endlagensensoren für beide Klappen (offen/geschlossen)
-  - Türsensoren für Paketzustellertür
+  - Magnetkontaktsensoren für Paketzustellertür
   - Briefkastensensoren für Entnahme
-  - Bewegungsmelder für Einklemmschutz
-- **Taster** für Gartentüröffner (Nr. 6 und 8)
+  - **Lichtschranke** für Einklemmschutz (GPIO 11)
 - **Beleuchtung** für Mülltonne und Paketbox
 
 ![Elektronische Komponenten der Paketbox](electronic_components.jpg)
@@ -153,6 +155,24 @@ Das System wurde in separate Module aufgeteilt:
 - **`TimerManager.py`**: Sichere Verwaltung von Motor-Timern
 - **`mqtt.py`**: MQTT-Integration mit Fallback-Mechanismus
 
+## ⚙️ Konfiguration (config.py)
+
+Die `config.py` enthält alle Systemparameter und GPIO-Pin-Zuordnungen:
+
+### Timer & Steuerung
+```python
+CLOSURE_DELAY = 60              # Verzögerung vor dem Schließen der Klappen (Sekunden)
+CLOSURE_TIMER_SECONDS = 65      # Zeit zum automatischen Schließen der Klappen
+OPENING_TIMER_SECONDS = 65      # Zeit zum automatischen Öffnen der Klappen
+DEBOUNCE_TIME = 0.2             # Entprellungszeit für Sensoren (Sekunden)
+```
+
+### Türverriegelung
+```python
+TIME_LOCK_DOOR = "00:00"        # Uhrzeit: Türverriegelung aktiviert
+TIME_UNLOCK_DOOR = "05:30"      # Uhrzeit: Türverriegelung deaktiviert (Lieferung möglich)
+```
+
 ## 🔄 Automatische Versionierung
 
 Das Projekt verwendet automatische Versionierung basierend auf [Conventional Commits](https://www.conventionalcommits.org/):
@@ -186,9 +206,36 @@ python paketbox.py  # Verwendet Fallback-Werte wenn MQTT nicht verfügbar
 - `home/raspi/briefkasten` - Briefkasten-Events
 - `home/raspi/paketboxleeren` - Paketbox-Entleerungs-Events
 
+## 🛡️ Lichtschranke - Sicherheitseinrichtung
+
+Die Lichtschranke ist eine kritische Sicherheitseinrichtung zum Schutz vor Einklemmungen:
+
+### Funktionsweise
+- **PIN 10** erfasst kontinuierlich den Betriebszustand
+- **Auslösung**: Wenn die Schranke unterbrochen wird (z.B. Finger/Hand im Weg)
+- **Notfall-Reaktion**: Motor stoppt sofort, um Verletzungen zu vermeiden
+- **Überwachung**: System protokolliert jede Auslösung im Logger
+
+### Automatische Reaktion
+```python
+if GPIO.input(10) == FALLING:              # Lichtschranke unterbrochen
+    handler.set_light_barrier_triggered(True)
+    logger.info("Lichtschranke hat ausgelöst - Notfall!")
+    handler.notHaltMotoren()               # Alle Motoren stoppen sofort
+```
+
+### Sicherheitsprotokoll
+- ✅ **Sofortiger Motorstopp** bei Erkennung von Hindernissen
+- ✅ **Fehlerprotokollierung** für Wartungsstatistiken
+- ✅ **Manuelle Rückstellung** erforderlich nach Auslösung
+- ✅ **Integrale Prüfung** bei System-Reset
+
+Diese Funktion entspricht Sicherheitsanforderungen für automatische Türsysteme.
+
 ## ⚠️ Sicherheit & Fehlerbehandlung
 
 ### Automatische Fehlererkennung
+- **Lichtschran-Auslösung**: Sofortiger Motorstopp bei Oberflächenblockade
 - **Motor-Blockage**: Erkennung wenn Klappen nicht öffnen/schließen
 - **GPIO-Fehler**: Behandlung von Hardware-Fehlern
 - **Timer-Management**: Sichere Abbruchfunktionen für alle Timer
@@ -250,5 +297,6 @@ python paketbox.py         # Anwendung muss ohne Fehler starten
 ## Lizenz
 MIT
 
-## Autor
-Andreas Beyer
+## Autoren
+- Andreas Beyer
+- Maximilian Lechner
