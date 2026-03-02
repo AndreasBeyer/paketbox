@@ -10,8 +10,17 @@ import unittest
 import sys
 import os
 
+
+def _prepare_sys_path():
+    """Ensure the repository root is importable for test modules."""
+    tests_dir = os.path.dirname(os.path.abspath(__file__))
+    repo_root = os.path.dirname(tests_dir)
+    if repo_root not in sys.path:
+        sys.path.insert(0, repo_root)
+
 def main():
     """Run all paketbox tests"""
+    _prepare_sys_path()
     print("=" * 60)
     print("Paketbox Test Environment")
     print("=" * 60)
