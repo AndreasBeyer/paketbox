@@ -119,7 +119,17 @@ def setOutputWithRuntime(runtime, gpio, state, timer_id=None):
       GPIO.output(gpio, state)
       def reset_output():
          opposite_state = GPIO.LOW if state == GPIO.HIGH else GPIO.HIGH
-         GPIO.output(gpio, opposite_state)
+         try:
+             GPIO.output(gpio, opposite_state)
+         except Exception as e:
+             if gpio not in Config.OUTPUTS[:4]:
+                 raise
+             logger.error(f"Motorabschaltung GPIO {gpio} fehlgeschlagen: {e}")
+             # Latch the error and invalidate end checks before they can unlock
+             # the door or start another movement. The emergency release path
+             # retries any outputs that still cannot be switched off.
+             notHaltMotoren()
+             return
          logger.debug(f"GPIO {gpio} zurückgeschaltet zu {opposite_state}")
       if timer_id:
           return timer_manager.start_timer(timer_id, runtime, reset_output)
