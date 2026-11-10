@@ -91,7 +91,7 @@ def notHaltMotoren():
     if released:
         logger.warning("Nothalt: Alle Motoren gestoppt, Timer abgebrochen und Tür verriegelt.")
     else:
-        logger.error("Nothalt: Motorfreigabe fehlgeschlagen; Wiederholung läuft.")
+        logger.error("Nothalt: Motorfreigabe fehlgeschlagen; Hardware prüfen.")
 
 def isAnyMotorRunning():
     """Check if any motor is currently running using state management."""
