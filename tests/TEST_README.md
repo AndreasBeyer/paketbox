@@ -2,6 +2,7 @@
 
 This directory contains a comprehensive test suite for the Paketbox control system that simulates the Raspberry Pi GPIO environment without requiring actual hardware.
 
+
 ## Overview
 
 The test environment provides:

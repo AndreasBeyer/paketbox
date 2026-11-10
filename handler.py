@@ -4,7 +4,8 @@ import logging
 from PaketBoxState import DoorState, MotorState
 from TimerManager import TimerManager
 from config import Config
-from state import pbox_state, sendMqttErrorState, mqttObject  # Import from central state module
+from state import pbox_state, sendMqttErrorState  # Import from central state module
+import state  # use state.mqttObject dynamically to stay in sync
 import time
 import mqtt
 from datetime import datetime
@@ -43,11 +44,11 @@ def ResetErrorState():
         
         # Reset motor states from ERROR to STOPPED
         if pbox_state.is_any_motor_error():
-            logger.info("Setze Motor-Fehlerzustände zurück...")
+            logger.debug("Setze Motor-Fehlerzustände zurück...")
             from PaketBoxState import MotorState
             pbox_state.set_left_motor(MotorState.STOPPED)
             pbox_state.set_right_motor(MotorState.STOPPED)
-            logger.info("Motor-Zustände auf STOPPED zurückgesetzt")
+            logger.debug("Motor-Zustände auf STOPPED zurückgesetzt")
         
         global sendMqttErrorState
         sendMqttErrorState = False  # Reset MQTT error state flag
@@ -90,6 +91,10 @@ def notHaltMotoren():
 def isAnyMotorRunning():
     """Check if any motor is currently running using state management."""
     return pbox_state.is_any_motor_running()
+
+def isAnyMotorError():
+    """Check if any motor is currently in error state using state management."""
+    return pbox_state.is_any_motor_error()
 
 def setLigthtPaketboxOn():
     GPIO = get_gpio()
@@ -186,7 +191,7 @@ def Klappen_schliessen():
         notHaltMotoren()
         return False
     
-    if pbox_state.is_any_error():
+    if isAnyMotorError():
         logger.warning("Motorsteuerung gestoppt: Globaler Fehlerzustand aktiv!")
         return False
     
@@ -364,14 +369,10 @@ def Klappen_oeffnen():
             # Reset light barrier when flaps open (for emptying process)
             # reset_light_barrier()
             # Set motor states to STOPPED after successful opening
-            pbox_state.set_left_motor(MotorState.STOPPED)
-            pbox_state.set_right_motor(MotorState.STOPPED)
+            # pbox_state.set_left_motor(MotorState.STOPPED)
+            # pbox_state.set_right_motor(MotorState.STOPPED)
             logger.info(f"Starte automatisches Schließen der Klappen... Status: {pbox_state}")
-            # Auto-close after successful opening
-            if (pbox_state.left_door == DoorState.OPEN and pbox_state.right_door == DoorState.OPEN):
-               Klappen_schliessen()
-            else:
-               logger.error(f"Fehler: Klappen nicht beide im OPEN-Zustand!")
+            Klappen_schliessen()
             return True
 
     timer = threading.Timer(Config.OPENING_TIMER_SECONDS + 1, endlagen_pruefung)
@@ -439,6 +440,10 @@ def auto_check_and_lock_door():
     if not is_auto_lock_door_enabled():
         return
     
+    if isAnyMotorRunning() or isAnyMotorError():
+        logger.debug("Automatische Verriegelung übersprungen: Motoren laufen gerade oder sind im Fehlerzustand.")
+        return
+
     try:
         should_be_locked = is_in_lock_period()
         is_currently_locked = isDoorLocked()
@@ -446,20 +451,14 @@ def auto_check_and_lock_door():
         if should_be_locked and not is_currently_locked:
             logger.info("Automatische Verriegelung: Tür wird verriegelt (Sperrzeit aktiv).")
             lockDoor()
-            if mqttObject:
-                try:
-                    mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Türe wurde automatisch verriegelt (Sperrzeit).")
-                except Exception as e:
-                    logger.debug(f"MQTT-Publish fehlgeschlagen: {e}")
+            if state.mqttObject:
+                state.mqttObject.publish_status("Türe wurde automatisch verriegelt (Sperrzeit).")
         
         elif not should_be_locked and is_currently_locked:
             logger.info("Automatische Entsperrung: Tür wird entriegelt (Sperrzeit vorbei).")
             unlockDoor()
-            if mqttObject:
-                try:
-                    mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Türe wurde automatisch entriegelt (Sperrzeit vorbei).")
-                except Exception as e:
-                    logger.debug(f"MQTT-Publish fehlgeschlagen: {e}")
+            if state.mqttObject:
+                state.mqttObject.publish_status("Türe wurde automatisch entriegelt (Sperrzeit vorbei).")
     
     except Exception as e:
         logger.error(f"Fehler bei automatischer Türverriegelung: {e}")

@@ -1,11 +1,11 @@
 # Paketbox Steuerung 📦
 
-![Tests](https://github.com/AndreasBeyer/paketbox/workflows/Paketbox%20Tests/badge.svg)
+![Tests](https://github.com/lechmax/paketbox/workflows/Paketbox%20Tests/badge.svg)
 
-![Paketbox](Paketbox.jpeg)
+![Paketbox](blueprint/Paketbox.jpeg)
 *Die intelligente Paketbox mit automatischer Lieferannahme und Verriegelung.*
 
-Dieses Projekt steuert eine intelligente Paketbox mit einem Raspberry Pi. Die Box kann Pakete sicher aufnehmen, automatisch verriegeln und entleeren. Die Steuerung erfolgt über Motoren, Sensoren und Relais mit professioneller Fehlerbehandlung und Logging.
+Dieses Projekt steuert eine intelligente Paketbox mit einem **Raspberry Pi Zero W2**. Die Box kann Pakete sicher aufnehmen, automatisch verriegeln und entleeren. Die Steuerung erfolgt über zwei Elektormotoren und diverse Sensoren mit professioneller Fehlerbehandlung und Logging. Sensorein- und Motorausgänge sind galvanisch über Optokoppler vom Raspberry Pi getrennt.
 
 ## ✨ Features
 - **Automatisches Öffnen und Schließen** der Entleerungsklappen
@@ -16,27 +16,98 @@ Dieses Projekt steuert eine intelligente Paketbox mit einem Raspberry Pi. Die Bo
 - **Mock-Modus** für lokale Entwicklung ohne Hardware
 - **MQTT-Integration** für IoT-Benachrichtigungen
 - **Thread-sichere Zustandsverwaltung** mit Locking-Mechanismen
-- **Automatische Versionierung** basierend auf Commit-Types
 - **Modulare Architektur** mit separaten Komponenten
 - **15-Minuten-Watchdog** für geöffnete Paketzustellertüren inkl. MQTT-Warnung und Auto-Entleerung
+- **Lichtschranke mit Notstopp** für Schutz vor Einklemmungen
+- **MQTT-basierte Steuerung** (Status, Zusteller/Briefkasten/Entleerung, Auto-Lock-Door)
+- **Zeitgesteuerte Türverriegelung** mit konfigurierbaren Sperrzeiten
+- **Ereignisse für Briefkasten & Paketbox** über MQTT Entleerungsbetrieb
 
-## 🆕 Neueste Änderungen (Herbst 2025)
+## 🆕 Neueste Änderungen (Frühjahr 2026)
 - **Watchdog für geöffnete Türen**: In `handler.py` überwacht ein 15-Minuten-Timer offene Paketzustellertüren, verschickt bei Bedarf MQTT-Warnungen und startet automatisch den Entleerungszyklus.
 - **Zentraler TimerManager**: `TimerManager.py` verwaltet jetzt alle Motor-, Prüf- und Watchdog-Timer mit Thread-Lock, wodurch Nothalt-Szenarien sämtliche Timer zuverlässig abbrechen.
 - **Verbesserter Fehler-Reset**: `ResetErrorState()` initialisiert Türsensoren neu, setzt Motorzustände sicher auf `STOPPED` und verhindert doppelte MQTT-Fehlerbenachrichtigungen.
 
 ## 🔧 Hardware
-- **Raspberry Pi** mit GPIO-Steuerung
-- **2 Motoren** für Entleerungsklappen mit Endlagensensoren
-- **Relais-Board** für Motorsteuerung und Türverriegelung
-- **Sensoren**:
-  - Endlagensensoren für beide Klappen (offen/geschlossen)
-  - Magnetkontaktsensoren für Paketzustellertür
-  - Briefkastensensoren für Entnahme
-  - **Lichtschranke** für Einklemmschutz (GPIO 11)
-- **Beleuchtung** für Mülltonne und Paketbox
 
-![Elektronische Komponenten der Paketbox](electronic_components.jpg)
+### 🏗️ Bauweise und Konstruktion
+
+#### Korpus und Verkleidung
+- **Skelett**: 22mm Sekieferplatten für Stabilität und Witterungsbeständigkeit
+- **Dachabdichtung**: Wetterfeste Untersparrenbahn zum Schutz vor Feuchte
+- **Außenverkleidung**: Lärchenbretter für natürlichen, langlebigen Wetterschutz und ästhetisches Erscheinungsbild
+
+#### Dach
+- **Hauptelement**: Edelstahlwanne mit zwei Überläufen für sichere Wasserableitung
+- **Wassermanagement**: Dränage- und Wasserspeicherelement mit Filtervlies
+- **Begrünung**: Sedum-Dachbegrünung für Isolierung, Regenwasserbewirtschaftung und Ästhetik
+
+![Paketbox Draufsicht](blueprint/Paketbox_Draufsicht.jpg)
+*Draufsicht der Paketbox zeigt die räumliche Anordnung der Paketzustellungsklappe, Briefkastenklappe und Mülltonnentür.*
+
+### 🚪 Türen und Klappen
+
+Die Paketbox verfügt über mehrere spezialisierte Öffnungen:
+
+#### 1. **Paketzustellungsklappe** (mit Motorenantrieb)
+- Von der Straße/Gehweg zugänglich
+- Mit automatischem Seilzug-System ausgestattet (Feder + Gegengewicht)
+- Automatisches Schließen nach Paketeinwurf
+- **Automatisierte Entleerung**: Nach Paketeinwurf und Klappenschließung verriegelt ein Magnetbolzen die Tür
+- Zwei **Linearmotoren** fahren dann synchron die beiden unteren Entleerungsklappen auf
+- Pakete fallen durch die Linearmotoren-Klappen in den unteren Bereich
+- Klappen schließen automatisch nach vollständiger Öffnung
+- Tür entriegelt, wenn Klappen oben sind – Prozess kann erneut beginnen
+
+#### 2. **Briefkastenklappe**
+- Zum Entnehmen von Briefen aus dem integrierten Briefkasten
+- Mit Magnetschalter ausgestattet
+
+#### 3. **Mülltonnentür**
+- Separate Tür zur sicheren Unterbringung der Mülltonne
+- Mit Magnetschalter ausgestattet
+
+### 🔐 Verriegelung und Sicherheit
+
+#### Magnetbolzen-System
+- **Automatische Verriegelung**: Nach Paketeinwurf wird die Paketzustellungstür mit einem Magnetbolzen verriegelt
+- Verhindert unbeabsichtigtes erneutes Öffnen während des Entleerungsvorgangs
+- Entsperrt automatisch, wenn die inneren Klappen wieder geschlossen sind
+
+#### Lichtschranke
+- **Position**: Unterhalb der elektrischen Entleerungsklappen
+- **Funktionen**:
+  - **Einklemmschutz**: Erkennt Hindernisse und unterbricht den Motorvorgang
+  - **Schutz vor Überfüllung**: Verhindert, dass zu viele Pakete eingelagert werden
+  - **Notfallvoraussetzung**: Auslöser für Nothalt-Szenarien
+
+### 📡 Sensorik und Steuerung
+
+#### Magnetkontaktsensoren
+- In **allen Türen und Klappen** eingebaut
+- Erkennen Öffnen und Schließen der einzelnen Komponenten
+- Liefern Rückmeldung für sichere Zustandsverfolgung
+
+#### Endlagensensoren
+- An beiden **Linearmotor-Klappen** für Position (offen/geschlossen)
+- Ermöglichen sichere Koordination des Öffnungs- und Schließvorgangs
+
+#### Steuerelektronik
+- **Raspberry Pi Zero W2** als zentrale Steuereinheit mit GPIO-Kontrolle
+- **Galvanische Trennung**: Sensorein- und Motorausgänge sind über Optokoppler galvanisch vom Raspberry Pi getrennt
+  - Schützt die empfindliche Elektronik des Raspberry Pi vor Spannungsspitzen und Störungen
+  - Erhöht die Zuverlässigkeit und Lebensdauer der Steuerung
+  - Ermöglicht sichere Arbeit mit unterschiedlichen Spannungssystemen
+- **Relais-Board** für Motorsteuerung und Magnetbolzen-Verriegelung
+- **2 Linearmotoren** mit präziser Positionskontrolle für Entleerungsklappen
+
+### 💡 Beleuchtung
+
+- **Automatische Beleuchtung** in den Fächern für Mülltonne und Pakete
+- Wird durch Magnetschalter bei Türöffnung ein- und ausgeschaltet
+- Verbessert Benutzerfreundlichkeit und Sicherheit
+
+![Elektronische Komponenten der Paketbox](blueprint/electronic_components.jpg)
 *Elektronische Komponenten: Raspberry Pi, Relais-Board, Sensorleitungen und Spannungsversorgung.*
 
 ## 🚀 Quick Start
@@ -45,14 +116,10 @@ Dieses Projekt steuert eine intelligente Paketbox mit einem Raspberry Pi. Die Bo
 1. **Python 3** installieren (3.7+)
 2. **Repository klonen**:
    ```bash
-   git clone https://github.com/AndreasBeyer/paketbox.git
+   git clone https://github.com/lechmax/paketbox.git
    cd paketbox
    ```
-3. **Automatische Versionierung einrichten**:
-   ```bash
-   python setup_versioning.py
-   ```
-4. **Abhängigkeiten** (optional):
+3. **Abhängigkeiten** (optional):
    ```bash
    pip install paho-mqtt  # Für MQTT-Funktionalität
    pip install RPi.GPIO   # Nur auf Raspberry Pi
@@ -66,14 +133,6 @@ python paketbox.py
 # Tests ausführen (empfohlen)
 python tests/run_tests.py
 
-# Version manuell erhöhen
-python update_version.py patch
-```
-
-### Produktive Verwendung
-```bash
-# Auf Raspberry Pi mit Hardware
-python paketbox.py
 ```
 
 ## 🛠️ Entwicklung & Test
@@ -126,26 +185,26 @@ logging.basicConfig(level=logging.DEBUG)
 
 ```
 max_paket_box/
-├── paketbox.py              # Hauptsteuerung (Version 0.7.0)
-├── handler.py               # Handler-Funktionen für GPIO und Motoren
-├── state.py                 # Zentrale Zustandsverwaltung
-├── config.py                # Konfiguration und GPIO-Pin-Zuordnungen
-├── PaketBoxState.py         # Zustandsklassen (Door/Motor States)
-├── TimerManager.py          # Timer-Verwaltung für Motoren
-├── mqtt.py                  # MQTT-Integration für IoT-Benachrichtigungen
+├── paketbox.py                     # Hauptsteuerung (Version 0.7.0)
+├── handler.py                      # Handler-Funktionen für GPIO und Motoren
+├── state.py                        # Zentrale Zustandsverwaltung
+├── config.py                       # Konfiguration und GPIO-Pin-Zuordnungen
+├── PaketBoxState.py                # Zustandsklassen (Door/Motor States)
+├── TimerManager.py                 # Timer-Verwaltung für Motoren
+├── mqtt.py                         # MQTT-Integration für IoT-Benachrichtigungen
+├── blueprint/
+│   ├── electronic_components.jpg   # Aufbau Schaltschrank mit Raspberry Pi
+│   ├── Paketbox Seitenansicht.jpg  # Technische Zeichnung Korpus Seitenasicht
+│   ├── Paketbox_Draufsicht.jpg     # Technische Zeichnung Korpus Draufsicht
+│   └── Paketbox.jpeg               # Ansicht fertige Paketbox
 ├── tests/
-│   ├── test_paketbox.py     # Umfassende Unit Tests
-│   └── run_tests.py         # Test Runner mit detailliertem Output
-├── update_version.py        # Automatische Versionsverwaltung
-├── setup_versioning.py     # Installation der Versionierung
-├── pre-commit-hook.sh       # Git Hook (Unix/Linux/Mac)
-├── pre-commit-hook.bat      # Git Hook (Windows)
-├── deploy_paketbox.*        # Deployment Scripts
-├── paketbox.log             # Strukturierte Log-Datei
-└── README.md                # Diese Datei
+│   ├── test_paketbox.py            # Umfassende Unit Tests
+│   └── run_tests.py                # Test Runner mit detailliertem Output
+├── paketbox.log                    # Strukturierte Log-Datei
+└── README.md                       # Diese Datei
 ```
 
-### Modulare Architektur (Version 0.7.0)
+### Modulare Architektur (Version 0.8.0)
 Das System wurde in separate Module aufgeteilt:
 - **`paketbox.py`**: Hauptsteuerung und GPIO-Event-Loop
 - **`handler.py`**: GPIO-Handler und Motor-Steuerungsfunktionen
@@ -171,16 +230,6 @@ DEBOUNCE_TIME = 0.2             # Entprellungszeit für Sensoren (Sekunden)
 ```python
 TIME_LOCK_DOOR = "00:00"        # Uhrzeit: Türverriegelung aktiviert
 TIME_UNLOCK_DOOR = "05:30"      # Uhrzeit: Türverriegelung deaktiviert (Lieferung möglich)
-```
-
-## 🔄 Automatische Versionierung
-
-Das Projekt verwendet automatische Versionierung basierend auf [Conventional Commits](https://www.conventionalcommits.org/):
-
-```bash
-feat: neue Funktion     → MINOR Version (0.7.0 → 0.8.0)
-fix: Bugfix            → PATCH Version (0.7.0 → 0.7.1)  
-BREAKING CHANGE:       → MAJOR Version (0.7.0 → 1.0.0)
 ```
 
 **Setup**: `python setup_versioning.py`
@@ -211,18 +260,10 @@ python paketbox.py  # Verwendet Fallback-Werte wenn MQTT nicht verfügbar
 Die Lichtschranke ist eine kritische Sicherheitseinrichtung zum Schutz vor Einklemmungen:
 
 ### Funktionsweise
-- **PIN 10** erfasst kontinuierlich den Betriebszustand
+- **Lichtschranke** erfasst kontinuierlich den Betriebszustand
 - **Auslösung**: Wenn die Schranke unterbrochen wird (z.B. Finger/Hand im Weg)
 - **Notfall-Reaktion**: Motor stoppt sofort, um Verletzungen zu vermeiden
 - **Überwachung**: System protokolliert jede Auslösung im Logger
-
-### Automatische Reaktion
-```python
-if GPIO.input(10) == FALLING:              # Lichtschranke unterbrochen
-    handler.set_light_barrier_triggered(True)
-    logger.info("Lichtschranke hat ausgelöst - Notfall!")
-    handler.notHaltMotoren()               # Alle Motoren stoppen sofort
-```
 
 ### Sicherheitsprotokoll
 - ✅ **Sofortiger Motorstopp** bei Erkennung von Hindernissen
@@ -246,19 +287,6 @@ Diese Funktion entspricht Sicherheitsanforderungen für automatische Türsysteme
 # Manueller Reset bei Fehlerzuständen
 handler.ResetErrorState()  # Setzt alle Fehler zurück
 handler.ResetDoors()       # Bringt Türen in sicheren Zustand
-```
-
-### Deployment
-```bash
-# Lokal testen (immer zuerst!)
-python paketbox.py
-
-# Tests ausführen vor Deployment
-python tests/run_tests.py
-
-# Auf Raspberry Pi übertragen
-./deploy_paketbox.sh pi 192.168.1.100 /home/pi/paketbox     # Linux/macOS
-deploy_paketbox.bat pi 192.168.1.100 /home/pi/paketbox      # Windows
 ```
 
 ## 🧪 Test-Coverage
