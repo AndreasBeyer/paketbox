@@ -28,6 +28,11 @@ Dieses Projekt steuert eine intelligente Paketbox mit einem **Raspberry Pi Zero 
 - **Zentraler TimerManager**: `TimerManager.py` verwaltet jetzt alle Motor-, Prüf- und Watchdog-Timer mit Thread-Lock, wodurch Nothalt-Szenarien sämtliche Timer zuverlässig abbrechen.
 - **Verbesserter Fehler-Reset**: `ResetErrorState()` initialisiert Türsensoren neu, setzt Motorzustände sicher auf `STOPPED` und verhindert doppelte MQTT-Fehlerbenachrichtigungen.
 
+### Korrektur: schnelles Öffnen und Schließen der Zustellertür
+Motorzyklen und Timer-Callbacks werden gemeinsam synchronisiert. Abgebrochene oder ersetzte Timer dürfen weder Relais noch Zustände eines neueren Zyklus verändern. Wiederholte Türkontakte starten während einer laufenden Klappenfahrt keinen zusätzlichen Entleerungszyklus.
+
+Wird die Zustellertür während der Öffnungsfahrt geöffnet, wird die Öffnungsfahrt samt Endlagenprüfung abgebrochen, bevor die Klappen schließen. Bereits laufendes Schließen wird nicht neu gestartet; die Tür wird erst nach erfolgreicher Schließprüfung entriegelt. Echte Endlagenfehler lösen weiterhin den Fehlerzustand aus und erfordern einen manuellen Reset. Die Wartezeit im Log entspricht jetzt `Config.CLOSURE_DELAY` (standardmäßig 60 Sekunden).
+
 ## 🔧 Hardware
 
 ### 🏗️ Bauweise und Konstruktion
