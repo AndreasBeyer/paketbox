@@ -77,6 +77,7 @@ def initialize_door_states():
     logger.info(f"Türzustände initialisiert: {pbox_state}")
     return statusOld
 
+@handler.timer_manager.synchronized
 def pinChanged(pin, oldState, newState):
     if oldState == 0 and newState == 1: # rising edge  
         if pin == 4:

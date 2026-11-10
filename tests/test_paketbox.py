@@ -13,9 +13,14 @@ from handler import (
     Paket_Tuer_Zusteller_geschlossen, Paket_Tuer_Zusteller_geoeffnet
 )  # Import handler functions to test
 from config import Config  # Import Config for timer values
+import handler
+from TimerManager import TimerManager
 
 class TestPaketBox(unittest.TestCase):
     def setUp(self):
+        handler.timer_manager.cancel_all_timers()
+        self.addCleanup(handler.timer_manager.cancel_all_timers)
+        handler.reset_light_barrier()
         # Setze den Zustand vor jedem Test zurück
         pbox_state.set_left_door(DoorState.CLOSED)
         pbox_state.set_right_door(DoorState.CLOSED)
@@ -896,10 +901,429 @@ class TestPaketBox(unittest.TestCase):
         # Verify flap opening was NOT called
         mock_oeffnen.assert_not_called()
 
+class TestTimerRaces(unittest.TestCase):
+    """Replay canceled callbacks explicitly instead of relying on wall-clock timing."""
+
+    def setUp(self):
+        handler.timer_manager.cancel_all_timers()
+        self.addCleanup(handler.timer_manager.cancel_all_timers)
+        handler.reset_light_barrier()
+        pbox_state.set_left_door(DoorState.CLOSED)
+        pbox_state.set_right_door(DoorState.CLOSED)
+        pbox_state.set_paket_tuer(DoorState.CLOSED)
+        pbox_state.set_left_motor(MotorState.STOPPED)
+        pbox_state.set_right_motor(MotorState.STOPPED)
+        self.timers = []
+
+        def create_timer(delay, callback):
+            timer = MagicMock()
+            timer.function = callback
+            timer.interval = delay
+            self.timers.append(timer)
+            return timer
+
+        timer_patch = patch('handler.threading.Timer', side_effect=create_timer)
+        timer_patch.start()
+        self.addCleanup(timer_patch.stop)
+        gpio_patch = patch('paketbox.GPIO')
+        self.gpio = gpio_patch.start()
+        self.addCleanup(gpio_patch.stop)
+        self.gpio.HIGH = 1
+        self.gpio.LOW = 0
+
+    def test_log_sequence_does_not_overlap_motor_cycles(self):
+        self.assertTrue(Klappen_oeffnen())
+        old_open_check = handler.timer_manager.active_timers['right_check']
+        old_motor_timers = self.timers[:2]
+
+        # Reopening while the flaps are moving must invalidate the opening cycle.
+        pinChanged(4, 0, 1)
+        closing_check = handler.timer_manager.active_timers['left_check']
+        self.assertIsNotNone(closing_check)
+        old_open_check.cancel.assert_called_once()
+        for _ in range(3):
+            pinChanged(4, 1, 0)
+            self.assertIsNone(handler.timer_manager.active_timers['delayed_open'])
+            pinChanged(4, 0, 1)
+            self.assertIs(handler.timer_manager.active_timers['left_check'], closing_check)
+        pinChanged(4, 1, 0)
+
+        # Even callbacks already dispatched before cancel() must be harmless.
+        for timer in old_motor_timers + [old_open_check]:
+            timer.function()
+        self.assertEqual(pbox_state.left_motor, MotorState.CLOSING)
+        self.assertFalse(pbox_state.is_any_error())
+
+        pinChanged(0, 1, 0)
+        pinChanged(2, 1, 0)
+        with patch('handler.unlockDoor') as unlock:
+            closing_check.function()
+            unlock.assert_called_once()
+        self.assertTrue(pbox_state.are_both_motors_stopped())
+        self.assertFalse(pbox_state.is_any_error())
+
+    def test_opening_is_rejected_during_closing(self):
+        self.assertTrue(Klappen_schliessen())
+        closing_check = handler.timer_manager.active_timers['left_check']
+        self.gpio.output.reset_mock()
+        self.assertFalse(Klappen_oeffnen())
+        self.gpio.output.assert_not_called()
+        self.assertIs(handler.timer_manager.active_timers['left_check'], closing_check)
+
+    def test_repeated_motor_commands_do_not_restart_timers(self):
+        self.assertTrue(Klappen_oeffnen())
+        count = len(self.timers)
+        self.assertFalse(Klappen_oeffnen())
+        self.assertEqual(len(self.timers), count)
+        self.assertTrue(Klappen_schliessen())
+        count = len(self.timers)
+        self.assertTrue(Klappen_schliessen())
+        self.assertEqual(len(self.timers), count)
+
+    def test_reversal_releases_opening_outputs_before_closing(self):
+        self.assertTrue(Klappen_oeffnen())
+        self.gpio.output.reset_mock()
+        self.assertTrue(Klappen_schliessen())
+        calls = self.gpio.output.call_args_list
+        for pin in Config.OUTPUTS[:4]:
+            self.assertEqual(calls[Config.OUTPUTS.index(pin)].args, (pin, self.gpio.HIGH))
+        self.assertEqual(calls[4].args, (Config.OUTPUTS[0], self.gpio.LOW))
+        self.assertEqual(calls[5].args, (Config.OUTPUTS[2], self.gpio.LOW))
+
+    def test_release_failures_abort_reversal_and_retry_until_safe(self):
+        self.addCleanup(handler.failed_motor_releases.clear)
+        self.assertTrue(Klappen_oeffnen())
+        old_motors = [handler.timer_manager.active_timers[key]
+                      for key in ('left_motor', 'right_motor')]
+        old_check = handler.timer_manager.active_timers['right_check']
+        failed = {Config.OUTPUTS[1], Config.OUTPUTS[3]}
+
+        def output(pin, value):
+            if pin in failed and value == self.gpio.HIGH:
+                raise RuntimeError("release failed")
+
+        self.gpio.output.side_effect = output
+        self.gpio.output.reset_mock()
+        self.assertFalse(Klappen_schliessen())
+        self.assertEqual([call.args for call in self.gpio.output.call_args_list],
+                         [(pin, self.gpio.HIGH) for pin in Config.OUTPUTS[:4]])
+        self.assertEqual(handler.failed_motor_releases, failed)
+        self.assertEqual(pbox_state.left_motor, MotorState.ERROR)
+        self.assertEqual(pbox_state.right_motor, MotorState.ERROR)
+        self.assertIsNone(handler.timer_manager.active_timers['right_check'])
+        for key, timer in zip(('left_motor', 'right_motor'), old_motors):
+            self.assertIs(handler.timer_manager.active_timers[key], timer)
+            timer.cancel.assert_not_called()
+        old_check.function()
+        self.assertFalse(handler.ResetErrorState())
+        self.assertFalse(Klappen_oeffnen())
+        self.assertFalse(Klappen_schliessen())
+
+        retry = handler.timer_manager.active_timers['motor_release_retry']
+        retry.function()
+        self.assertIsNotNone(handler.timer_manager.active_timers['motor_release_retry'])
+        failed.clear()
+        handler.timer_manager.active_timers['motor_release_retry'].function()
+        self.assertFalse(handler.failed_motor_releases)
+        self.assertTrue(pbox_state.is_any_motor_error())
+        self.assertIsNone(handler.timer_manager.active_timers['motor_release_retry'])
+        for key, timer in zip(('left_motor', 'right_motor'), old_motors):
+            self.assertIsNone(handler.timer_manager.active_timers[key])
+            timer.cancel.assert_called_once()
+            timer.function()
+        with patch('handler.get_initialize_door_states') as initialize:
+            self.assertTrue(handler.ResetErrorState())
+            initialize.return_value.assert_called_once()
+
+    def test_release_retry_survives_emergency_stop(self):
+        self.addCleanup(handler.failed_motor_releases.clear)
+        self.assertTrue(Klappen_oeffnen())
+        failed_pin = Config.OUTPUTS[1]
+
+        def output(pin, value):
+            if pin == failed_pin and value == self.gpio.HIGH:
+                raise RuntimeError("release failed")
+
+        self.gpio.output.side_effect = output
+        self.assertFalse(Klappen_schliessen())
+        retry = handler.timer_manager.active_timers['motor_release_retry']
+        handler.notHaltMotoren()
+        self.assertIs(handler.timer_manager.active_timers['motor_release_retry'], retry)
+        self.assertTrue(pbox_state.is_any_motor_error())
+        self.gpio.output.side_effect = None
+        retry.function()
+        self.assertFalse(handler.failed_motor_releases)
+        self.assertTrue(pbox_state.is_any_motor_error())
+
+    def test_release_failure_without_motor_timer_and_retry_start_failure(self):
+        self.addCleanup(handler.failed_motor_releases.clear)
+        failed_pin = Config.OUTPUTS[0]
+
+        def output(pin, value):
+            if pin == failed_pin and value == self.gpio.HIGH:
+                raise RuntimeError("release failed")
+
+        self.gpio.output.side_effect = output
+        with patch.object(handler.timer_manager, 'start_timer', side_effect=RuntimeError("timer failed")):
+            self.assertFalse(Klappen_oeffnen())
+        self.assertEqual(handler.failed_motor_releases, {failed_pin})
+        self.assertTrue(pbox_state.is_any_motor_error())
+        self.assertFalse(handler.ResetErrorState())
+        self.assertIsNotNone(handler.timer_manager.active_timers['motor_release_retry'])
+        self.gpio.output.side_effect = None
+        handler.timer_manager.active_timers['motor_release_retry'].function()
+        self.assertFalse(handler.failed_motor_releases)
+        self.assertTrue(pbox_state.is_any_motor_error())
+
+    def _use_latched_gpio(self, failed_releases):
+        """Model GPIO levels and fail selected HIGH writes without changing them."""
+        levels = {pin: self.gpio.HIGH for pin in Config.OUTPUTS}
+
+        def output(pin, value):
+            if pin in failed_releases and value == self.gpio.HIGH:
+                raise RuntimeError("release failed")
+            levels[pin] = value
+
+        self.gpio.output.side_effect = output
+        self.gpio.input.side_effect = lambda pin: levels.get(pin, self.gpio.LOW)
+        self.addCleanup(handler.failed_motor_releases.clear)
+        return levels
+
+    def test_regular_closing_stop_failure_keeps_door_locked_until_reset(self):
+        failed = set()
+        levels = self._use_latched_gpio(failed)
+        lockDoor()
+        pbox_state.set_left_door(DoorState.OPEN)
+        pbox_state.set_right_door(DoorState.OPEN)
+        self.assertTrue(Klappen_schliessen())
+        left_stop = handler.timer_manager.active_timers['left_motor']
+        right_stop = handler.timer_manager.active_timers['right_motor']
+        closing_check = handler.timer_manager.active_timers['left_check']
+        pinChanged(0, 1, 0)
+        pinChanged(2, 1, 0)
+        failed.add(Config.OUTPUTS[0])
+
+        # An uncaught exception kills only the timer thread; other callbacks
+        # still run. Exercise that old failure mode before checking safety.
+        try:
+            left_stop.function()
+        except RuntimeError:
+            pass
+        right_stop.function()
+        closing_check.function()
+
+        self.assertTrue(pbox_state.is_any_motor_error())
+        self.assertEqual(levels[Config.OUTPUTS[7]], self.gpio.LOW)
+        self.assertEqual([levels[pin] for pin in Config.OUTPUTS[:4]], [0, 1, 1, 1])
+        self.assertFalse(handler.ResetErrorState())
+        self.assertFalse(Klappen_oeffnen())
+        retry = handler.timer_manager.active_timers['motor_release_retry']
+        self.assertIsNotNone(retry)
+        retry.function()
+        self.assertTrue(pbox_state.is_any_motor_error())
+
+        failed.clear()
+        handler.timer_manager.active_timers['motor_release_retry'].function()
+        self.assertEqual([levels[pin] for pin in Config.OUTPUTS[:4]], [1, 1, 1, 1])
+        self.assertFalse(handler.failed_motor_releases)
+        self.assertTrue(pbox_state.is_any_motor_error())
+        closing_check.function()
+        self.assertEqual(levels[Config.OUTPUTS[7]], self.gpio.LOW)
+        self.assertTrue(handler.ResetErrorState())
+        self.assertTrue(pbox_state.are_both_motors_stopped())
+
+    def test_regular_opening_stop_failure_does_not_start_closing(self):
+        failed = set()
+        levels = self._use_latched_gpio(failed)
+        lockDoor()
+        self.assertTrue(Klappen_oeffnen())
+        right_stop = handler.timer_manager.active_timers['right_motor']
+        opening_check = handler.timer_manager.active_timers['right_check']
+        pinChanged(1, 1, 0)
+        pinChanged(3, 1, 0)
+        failed.add(Config.OUTPUTS[3])
+
+        try:
+            right_stop.function()
+        except RuntimeError:
+            pass
+
+        self.assertTrue(pbox_state.is_any_motor_error())
+        opening_check.function()
+        self.assertEqual([levels[pin] for pin in Config.OUTPUTS[:4]], [1, 1, 1, 0])
+        self.assertEqual(levels[Config.OUTPUTS[7]], self.gpio.LOW)
+        self.assertIsNotNone(handler.timer_manager.active_timers['motor_release_retry'])
+
+    def test_transient_regular_stop_failure_still_requires_manual_reset(self):
+        levels = self._use_latched_gpio(set())
+        output = self.gpio.output.side_effect
+        lockDoor()
+        self.assertTrue(Klappen_schliessen())
+        left_stop = handler.timer_manager.active_timers['left_motor']
+        closing_check = handler.timer_manager.active_timers['left_check']
+
+        def fail_once(pin, value):
+            if pin == Config.OUTPUTS[0] and value == self.gpio.HIGH:
+                self.gpio.output.side_effect = output
+                raise RuntimeError("transient release failure")
+            output(pin, value)
+
+        self.gpio.output.side_effect = fail_once
+        try:
+            left_stop.function()
+        except RuntimeError:
+            pass
+        closing_check.function()
+
+        self.assertTrue(pbox_state.is_any_motor_error())
+        self.assertEqual([levels[pin] for pin in Config.OUTPUTS[:4]], [1, 1, 1, 1])
+        self.assertEqual(levels[Config.OUTPUTS[7]], self.gpio.LOW)
+        self.assertTrue(handler.ResetErrorState())
+        self.assertTrue(pbox_state.are_both_motors_stopped())
+
+    def test_replaced_delayed_callback_cannot_start_or_clear_new_timer(self):
+        Paket_Tuer_Zusteller_geschlossen()
+        old = handler.timer_manager.active_timers['delayed_open']
+        Paket_Tuer_Zusteller_geschlossen()
+        current = handler.timer_manager.active_timers['delayed_open']
+        with patch('handler.Klappen_oeffnen') as opening:
+            old.function()
+            opening.assert_not_called()
+            self.assertIs(handler.timer_manager.active_timers['delayed_open'], current)
+            current.function()
+            opening.assert_called_once()
+
+    def test_pending_open_does_not_lock_door_during_active_cycle(self):
+        Paket_Tuer_Zusteller_geschlossen()
+        delayed = handler.timer_manager.active_timers['delayed_open']
+        Klappen_schliessen()
+        with patch('handler.lockDoor') as lock:
+            delayed.function()
+            lock.assert_not_called()
+        self.assertEqual(pbox_state.left_motor, MotorState.CLOSING)
+
+    def test_emergency_stop_invalidates_all_callbacks(self):
+        Klappen_oeffnen()
+        timers = list(self.timers)
+        handler.notHaltMotoren()
+        self.gpio.output.reset_mock()
+        for timer in timers:
+            timer.function()
+        self.gpio.output.assert_not_called()
+        self.assertEqual(pbox_state.left_motor, MotorState.ERROR)
+        self.assertTrue(all(timer is None for timer in handler.timer_manager.active_timers.values()))
+
+    def test_stale_watchdog_does_not_empty_after_door_reopens(self):
+        pinChanged(4, 0, 1)
+        old = handler.timer_manager.active_timers['door_open_watchdog']
+        pinChanged(4, 1, 0)
+        pinChanged(4, 0, 1)
+        current = handler.timer_manager.active_timers['door_open_watchdog']
+        with patch('handler.Klappen_oeffnen') as opening:
+            old.function()
+            opening.assert_not_called()
+        self.assertIs(handler.timer_manager.active_timers['door_open_watchdog'], current)
+
+    def test_timer_is_registered_before_start(self):
+        manager = TimerManager()
+        callback = MagicMock()
+
+        def start_immediately(delay, function):
+            timer = MagicMock()
+            timer.start.side_effect = function
+            return timer
+
+        with patch('handler.threading.Timer', side_effect=start_immediately):
+            manager.start_timer('delayed_open', 0, callback)
+        callback.assert_called_once()
+        self.assertIsNone(manager.active_timers['delayed_open'])
+
+    def test_dispatched_callback_waiting_for_lock_is_invalidated(self):
+        manager = TimerManager()
+        callback = MagicMock()
+        old = manager.start_timer('delayed_open', 60, callback)
+        dispatched = threading.Event()
+
+        def dispatch():
+            dispatched.set()
+            old.function()
+
+        @manager.synchronized
+        def replace_while_locked():
+            worker = threading.Thread(target=dispatch)
+            worker.start()
+            self.assertTrue(dispatched.wait(5))
+            replacement = manager.start_timer('delayed_open', 60, MagicMock())
+            return worker, replacement
+
+        worker, replacement = replace_while_locked()
+        worker.join(5)
+        self.assertFalse(worker.is_alive())
+        callback.assert_not_called()
+        self.assertIs(manager.active_timers['delayed_open'], replacement)
+
+    def test_simultaneous_open_commands_start_only_one_cycle(self):
+        ready = threading.Barrier(3)
+        results = []
+
+        def open_flaps():
+            ready.wait(timeout=5)
+            results.append(Klappen_oeffnen())
+
+        workers = [threading.Thread(target=open_flaps) for _ in range(2)]
+        for worker in workers:
+            worker.start()
+        ready.wait(timeout=5)
+        for worker in workers:
+            worker.join(5)
+            self.assertFalse(worker.is_alive())
+        self.assertCountEqual(results, [True, False])
+        self.assertEqual(len(self.timers), 3)
+
+    def test_complete_delivery_cycle_with_managed_timers(self):
+        pinChanged(4, 0, 1)
+        pinChanged(4, 1, 0)
+        handler.timer_manager.active_timers['delayed_open'].function()
+        opening_check = handler.timer_manager.active_timers['right_check']
+        pinChanged(1, 1, 0)
+        pinChanged(3, 1, 0)
+        opening_check.function()
+        self.assertEqual(pbox_state.left_motor, MotorState.CLOSING)
+        closing_check = handler.timer_manager.active_timers['left_check']
+        pinChanged(0, 1, 0)
+        pinChanged(2, 1, 0)
+        with patch('handler.unlockDoor') as unlock:
+            closing_check.function()
+            unlock.assert_called_once()
+        self.assertTrue(pbox_state.is_all_closed())
+        self.assertTrue(pbox_state.are_both_motors_stopped())
+        self.assertFalse(pbox_state.is_any_error())
+
+    def test_partial_motor_start_failure_stops_other_motor_and_timers(self):
+        original_output = handler.setOutputWithRuntime
+        attempts = 0
+
+        def fail_second_motor(*args):
+            nonlocal attempts
+            attempts += 1
+            return original_output(*args) if attempts == 1 else None
+
+        with patch('handler.setOutputWithRuntime', side_effect=fail_second_motor):
+            self.assertFalse(Klappen_oeffnen())
+        for pin in Config.OUTPUTS[:4]:
+            states = [call.args[1] for call in self.gpio.output.call_args_list if call.args[0] == pin]
+            self.assertEqual(states[-1], self.gpio.HIGH)
+        self.assertTrue(pbox_state.is_any_motor_error())
+        self.assertTrue(all(timer is None for timer in handler.timer_manager.active_timers.values()))
+
+
 class TestPaketBoxIntegration(unittest.TestCase):
     """Integration tests for complete system scenarios"""
     
     def setUp(self):
+        handler.timer_manager.cancel_all_timers()
+        self.addCleanup(handler.timer_manager.cancel_all_timers)
+        handler.reset_light_barrier()
         # Reset state for each test
         pbox_state.set_left_door(DoorState.CLOSED)
         pbox_state.set_right_door(DoorState.CLOSED)

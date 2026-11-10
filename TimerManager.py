@@ -1,6 +1,7 @@
 # Timer state management for active motor timers
 import threading
 import logging
+from functools import wraps
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,35 @@ class TimerManager:
             'delayed_open': None,
             'door_open_watchdog': None  # 15-Minuten-Überwachung für geöffnete Paket-Tür
         }
-        self._lock = threading.Lock()
+        self._lock = threading.RLock()
+
+    def synchronized(self, callback):
+        """Serialize control operations with timer callbacks and cancellation."""
+        @wraps(callback)
+        def guarded(*args, **kwargs):
+            with self._lock:
+                return callback(*args, **kwargs)
+        return guarded
+
+    def start_timer(self, timer_id: str, delay, callback):
+        """Register before starting; canceled or replaced callbacks cannot run."""
+        with self._lock:
+            def guarded_callback():
+                with self._lock:
+                    # cancel() alone cannot stop a callback already dispatched.
+                    if self.active_timers.get(timer_id) is not timer:
+                        return
+                    self.active_timers[timer_id] = None
+                    return callback()
+
+            timer = threading.Timer(delay, guarded_callback)
+            self.add_timer(timer_id, timer)
+            try:
+                timer.start()
+            except Exception:
+                self.cancel_timer(timer_id)
+                raise
+            return timer
 
     def add_timer(self, timer_id: str, timer):
         """Add or replace a timer in the manager"""
