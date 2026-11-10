@@ -1,6 +1,5 @@
 # Paketbox control script
-# Version 0.8.0
-import time
+# Version 0.8.11
 import sys
 import logging
 from PaketBoxState import DoorState, MotorState
@@ -86,18 +85,22 @@ def pinChanged(pin, oldState, newState):
             handler.Paket_Tuer_Zusteller_geoeffnet()
             if mqttObject:
                 mqttObject.publish_paket_zusteller_event("ON")
+                mqttObject.publish_status("Paketbox wurde geöffnet.")
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geöffnet.")
             if mqttObject:
                 mqttObject.publish_briefkasten_event("ON")
+                mqttObject.publish_status("Briefkasten wurde geöffnet.")
         elif pin == 6:
             logger.info(f"Briefkasten Türe zum Leeren geöffnet.")
             if mqttObject:
                 mqttObject.publish_briefkasten_entleeren_event("ON")
+                mqttObject.publish_status("Briefkasten wurde geleert.")
         elif pin == 7:
             logger.info(f"Paketbox Türe zum Leeren geöffnet.")
             if mqttObject:
                 mqttObject.publish_paketbox_entleeren_event("ON")
+                mqttObject.publish_status("Paketbox wurde geleert.")
             handler.setLigthtPaketboxOn()
         elif pin == 9:  
             logger.info(f"Tür Mültonne geöffnet.")
@@ -105,6 +108,8 @@ def pinChanged(pin, oldState, newState):
         elif pin == 10:
             logger.info(f"Lichtschranke ist nicht mehr ausgelöst.")
             handler.reset_light_barrier()
+            if mqttObject:
+                mqttObject.publish_status("Lichtschranke zurückgesetzt.")
 
     elif oldState == 1 and newState == 0: # falling edge
         if pin == 0:
@@ -123,7 +128,7 @@ def pinChanged(pin, oldState, newState):
             pbox_state.set_paket_tuer(DoorState.CLOSED)
             logger.info(f"Paketklappe Zusteller geschlossen.")
             if mqttObject:
-                mqttObject.publish_paket_zusteller_event("OFF")  
+                mqttObject.publish_paket_zusteller_event("OFF")
             handler.Paket_Tuer_Zusteller_geschlossen()
         elif pin == 5:
             logger.info(f"Briefkasten Zusteller geschlossen.")
@@ -138,16 +143,18 @@ def pinChanged(pin, oldState, newState):
             if mqttObject:
                 mqttObject.publish_paketbox_entleeren_event("OFF")
             handler.setLigthtPaketboxOff()
-            # handler.ResetErrorState()
-            # handler.ResetDoors()
         elif pin == 8:
-            logger.info(f"Türöffner Taster 6 gedrückt.")
+            logger.info(f"Reset wird ausgelöst.")
+            handler.ResetErrorState()
+            handler.ResetDoors()
         elif pin == 9:
             logger.info(f"Tür Mültonne geschlossen.")
             handler.lichtMueltonneOff()
         elif pin == 10:
             logger.info(f"Lichtschranke hat ausgelöst.")
             handler.set_light_barrier_triggered(True)
+            if mqttObject:
+                mqttObject.publish_status("Lichtschranke ausgelöst.")
 
     else:
         logger.warning(f"pinChanged: oldState == newState keine Änderung erkannt.")
@@ -167,8 +174,14 @@ def main():
 
         global mqttObject
         mqttObject = mqtt
+        # keep central state module in sync so other modules can reference it
+        try:
+            import state
+            state.mqttObject = mqtt
+        except ImportError:
+            pass
         mqttObject.start_mqtt()
-        mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} Paketbox bereit.")
+        mqttObject.publish_status("Paketbox bereit.")
         # Initialize door states based on current GPIO readings
         statusOld = initialize_door_states()
         statusNew = [0] * len(Config.INPUTS)
@@ -195,14 +208,14 @@ def main():
                statusNew[i] = GPIO.input(pin)
                if statusNew[i] != statusOld[i]:
                    pinChanged(i, statusOld[i], statusNew[i])
-                   logger.info(f"GPIO {pin} changed: {statusOld[i]} -> {statusNew[i]}")
+                   logger.debug(f"GPIO {pin} changed: {statusOld[i]} -> {statusNew[i]}")
                    statusOld[i] = statusNew[i]
 
            # Monitor for error conditions
            if ( not sendMqttErrorState and pbox_state.is_any_error()):
                logger.warning(f"WARNUNG: System im Fehlerzustand! {pbox_state}")
                if mqttObject:
-                   mqttObject.publish_status(f"{time.strftime('%Y-%m-%d %H:%M:%S')} FEHLER Paketbox: {pbox_state}")
+                   mqttObject.publish_status(f"FEHLER Paketbox: {pbox_state}")
                sendMqttErrorState = True
 
     except KeyboardInterrupt:

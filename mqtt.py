@@ -7,6 +7,7 @@ except ImportError:
 
 import logging
 import time
+from datetime import datetime
 from config import Config as config
 
 logger = logging.getLogger(__name__)
@@ -109,9 +110,17 @@ def publish_status(message):
         return False
         
     if _client:
-        _client.publish(config.MQTT_TOPIC_MESSAGE, message)
-        logger.info(f"MQTT gesendet: {message}")
-        return True
+        try:
+            # prepend current date/time to every status message automatically
+            ts = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            # full_message = f"{ts} {message}"
+            full_message = f"{message}"
+            _client.publish(config.MQTT_TOPIC_MESSAGE, full_message)
+            logger.info(f"MQTT gesendet: {full_message}")
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Senden der MQTT-Nachricht: {e}")
+            return False
     else:
         logger.warning("MQTT-Client nicht verbunden, Nachricht nicht gesendet.")
         return False
@@ -123,9 +132,13 @@ def publish_paket_zusteller_event(state):
         return False
         
     if _client:
-        _client.publish(config.MQTT_TOPIC_PAKETZUSTELLER, state)
-        logger.info(f"Paket-Zusteller-Event gesendet: {state}")
-        return True
+        try:
+            _client.publish(config.MQTT_TOPIC_PAKETZUSTELLER, state)
+            logger.info(f"Paket-Zusteller-Event gesendet: {state}")
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Senden des Paket-Zusteller-Events: {e}")
+            return False
     else:
         logger.warning("MQTT-Client nicht verbunden, Paket-Zusteller-Event nicht gesendet.")
         return False
@@ -137,9 +150,13 @@ def publish_briefkasten_event(state):
         return False
         
     if _client:
-        _client.publish(config.MQTT_TOPIC_BRIEFKASTEN, state)
-        logger.info(f"Briefkasten-Event gesendet: {state}")
-        return True
+        try:
+            _client.publish(config.MQTT_TOPIC_BRIEFKASTEN, state)
+            logger.info(f"Briefkasten-Event gesendet: {state}")
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Senden des Briefkasten-Events: {e}")
+            return False
     else:
         logger.warning("MQTT-Client nicht verbunden, Briefkasten-Event nicht gesendet.")
         return False
@@ -151,9 +168,13 @@ def publish_briefkasten_entleeren_event(state):
         return False
         
     if _client:
-        _client.publish(config.MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN, state)
-        logger.info(f"Briefkasten-Entleeren-Event gesendet: {state}")
-        return True
+        try:
+            _client.publish(config.MQTT_TOPIC_BRIEFKASTEN_ENTLEEREN, state)
+            logger.info(f"Briefkasten-Entleeren-Event gesendet: {state}")
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Senden des Briefkasten-Entleeren-Events: {e}")
+            return False
     else:
         logger.warning("MQTT-Client nicht verbunden, Briefkasten-Entleeren-Event nicht gesendet.")
         return False
@@ -165,9 +186,13 @@ def publish_paketbox_entleeren_event(state):
         return False
         
     if _client:
-        _client.publish(config.MQTT_TOPIC_PAKETBOX_ENTLEEREN, state)
-        logger.info(f"Paketbox-Entleeren-Event gesendet: {state}")
-        return True
+        try:
+            _client.publish(config.MQTT_TOPIC_PAKETBOX_ENTLEEREN, state)
+            logger.info(f"Paketbox-Entleeren-Event gesendet: {state}")
+            return True
+        except Exception as e:
+            logger.error(f"Fehler beim Senden des Paketbox-Entleeren-Events: {e}")
+            return False
     else:
         logger.warning("MQTT-Client nicht verbunden, Paketbox-Entleeren-Event nicht gesendet.")
         return False
