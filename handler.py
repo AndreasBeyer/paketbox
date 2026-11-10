@@ -27,6 +27,8 @@ logger = logging.getLogger(__name__)
 # Global timer manager instance
 timer_manager = TimerManager()
 
+failed_motor_releases = set()
+
 # Global light barrier state
 light_barrier_triggered = False 
 
@@ -34,6 +36,10 @@ light_barrier_triggered = False
 def ResetErrorState():
     """Reset all doors and motors from ERROR state to safe state."""
     logger.info("Starte Reset des Fehlerzustands...")
+
+    if failed_motor_releases and not _cancel_motor_cycle():
+        logger.error("Motorfreigabe fehlgeschlagen - Fehlerzustand bleibt aktiv.")
+        return False
     
     # Check if any door or motor is in error state
     if pbox_state.is_any_error():
@@ -74,21 +80,18 @@ def lichtMueltonneOff():
 
 @timer_manager.synchronized
 def notHaltMotoren():
-    GPIO = get_gpio()
-    GPIO.output(Config.OUTPUTS[0], GPIO.HIGH) # Alle Motoren stoppen
-    GPIO.output(Config.OUTPUTS[1], GPIO.HIGH) 
-    GPIO.output(Config.OUTPUTS[2], GPIO.HIGH) 
-    GPIO.output(Config.OUTPUTS[3], GPIO.HIGH) 
-    GPIO.output(Config.OUTPUTS[7], GPIO.LOW) # Riegel Tür verriegelt
-    
-    # Cancel all active motor timers
-    timer_manager.cancel_all_timers()
-    
     # Set motor states to error due to emergency stop
     pbox_state.set_left_motor(MotorState.ERROR)
     pbox_state.set_right_motor(MotorState.ERROR)
+
+    timer_manager.cancel_timer('door_open_watchdog')
+    released = _cancel_motor_cycle()
+    lockDoor()
     
-    logger.warning("Nothalt: Alle Motoren gestoppt, Timer abgebrochen und Tür verriegelt.")
+    if released:
+        logger.warning("Nothalt: Alle Motoren gestoppt, Timer abgebrochen und Tür verriegelt.")
+    else:
+        logger.error("Nothalt: Motorfreigabe fehlgeschlagen; Wiederholung läuft.")
 
 def isAnyMotorRunning():
     """Check if any motor is currently running using state management."""
@@ -181,11 +184,36 @@ def isDoorLocked():
 
 def _cancel_motor_cycle():
     """Invalidate the old cycle and release relays before changing direction."""
-    for timer_id in ('left_motor', 'right_motor', 'left_check', 'right_check', 'delayed_open'):
+    for timer_id in ('left_check', 'right_check', 'delayed_open'):
         timer_manager.cancel_timer(timer_id)
     GPIO = get_gpio()
     for output in Config.OUTPUTS[:4]:
-        GPIO.output(output, GPIO.HIGH)
+        try:
+            GPIO.output(output, GPIO.HIGH)
+        except Exception as e:
+            logger.error(f"Motorfreigabe GPIO {output} fehlgeschlagen: {e}")
+            failed_motor_releases.add(output)
+        else:
+            failed_motor_releases.discard(output)
+
+    if failed_motor_releases:
+        pbox_state.set_left_motor(MotorState.ERROR)
+        pbox_state.set_right_motor(MotorState.ERROR)
+
+        def retry_release():
+            _cancel_motor_cycle()
+
+        if timer_manager.active_timers.get('motor_release_retry') is None:
+            try:
+                timer_manager.start_timer('motor_release_retry', 1, retry_release)
+            except Exception:
+                logger.exception("Motorfreigabe-Wiederholung konnte nicht gestartet werden")
+        return False
+
+    timer_manager.cancel_timer('motor_release_retry')
+    for timer_id in ('left_motor', 'right_motor'):
+        timer_manager.cancel_timer(timer_id)
+    return True
 
 
 @timer_manager.synchronized
@@ -207,7 +235,8 @@ def Klappen_schliessen():
         logger.info("Klappen schließen bereits; laufender Zyklus bleibt unverändert.")
         return True
 
-    _cancel_motor_cycle()
+    if not _cancel_motor_cycle():
+        return False
     
     logger.info("Klappen fahren zu")
     # Set motor states to CLOSING
@@ -347,7 +376,8 @@ def Klappen_oeffnen():
         logger.info("Klappen-Öffnung übersprungen: Motorzyklus läuft bereits.")
         return False
 
-    _cancel_motor_cycle()
+    if not _cancel_motor_cycle():
+        return False
     logger.info("Klappen fahren auf")
     # Set motor states to OPENING
     pbox_state.set_left_motor(MotorState.OPENING)

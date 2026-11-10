@@ -33,6 +33,8 @@ Motorzyklen und Timer-Callbacks werden gemeinsam synchronisiert. Abgebrochene od
 
 Wird die Zustellertür während der Öffnungsfahrt geöffnet, wird die Öffnungsfahrt samt Endlagenprüfung abgebrochen, bevor die Klappen schließen. Bereits laufendes Schließen wird nicht neu gestartet; die Tür wird erst nach erfolgreicher Schließprüfung entriegelt. Echte Endlagenfehler lösen weiterhin den Fehlerzustand aus und erfordern einen manuellen Reset. Die Wartezeit im Log entspricht jetzt `Config.CLOSURE_DELAY` (standardmäßig 60 Sekunden).
 
+Schlägt die Freigabe eines Motorrelais fehl, wird keine Gegenfahrt gestartet. Alle Motorrelais werden freizugeben versucht, vorhandene Abschalttimer bleiben aktiv und die Freigabe wird wiederholt. Der Fehler bleibt bis zum manuellen Reset bestehen; solange eine Freigabe fehlschlägt, wird der Reset verweigert. Bei anhaltendem Hardwarefehler die Motorversorgung sicher abschalten und die Anlage prüfen: Software kann eine physische Abschaltung nicht garantieren.
+
 ## 🔧 Hardware
 
 ### 🏗️ Bauweise und Konstruktion
